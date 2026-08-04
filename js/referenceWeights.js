@@ -11,7 +11,8 @@
  * US Coins (very consistent, good for calibration)
  */
 const US_COINS = [
-  { id: 'penny', name: 'US Penny', grams: 2.5, tolerance: 0.1, icon: '🪙', category: 'coin' },
+  { id: 'penny_modern', name: 'US Penny (1983–present)', grams: 2.5, tolerance: 0.1, icon: '🪙', category: 'coin' },
+  { id: 'penny_copper', name: 'US Penny (pre-1982)', grams: 3.11, tolerance: 0.1, icon: '🪙', category: 'coin' },
   { id: 'nickel', name: 'US Nickel', grams: 5.0, tolerance: 0.1, icon: '🪙', category: 'coin', recommended: true },
   { id: 'dime', name: 'US Dime', grams: 2.268, tolerance: 0.05, icon: '🪙', category: 'coin' },
   { id: 'quarter', name: 'US Quarter', grams: 5.67, tolerance: 0.1, icon: '🪙', category: 'coin', recommended: true },
@@ -147,7 +148,7 @@ function getWeightCombinations() {
   // Simple combinations up to 3 items
   for (let i = 0; i < coins.length; i++) {
     for (let j = i; j < coins.length; j++) {
-      const total = coins[i].grams + (i === j ? 0 : coins[j].grams);
+      const total = coins[i].grams + coins[j].grams;
       const name = i === j 
         ? `2× ${coins[i].name}`
         : `${coins[i].name} + ${coins[j].name}`;

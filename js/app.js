@@ -249,7 +249,6 @@ class PhonewayApp {
     bind('btnStats', () => this._showStats());
     bind('btnLight', () => this._toggleBacklight());
     
-    bind('skipCalBtn', () => this._hideCalModal());
     bind('startCalBtn', () => this._startCalibration());
     bind('calCancelBtn', () => this._hideCalModal());
     bind('calConfirmBtn', () => this._proceedWithCalibration());
@@ -330,6 +329,14 @@ class PhonewayApp {
 
   _onWeight(grams, confidence, isStable) {
     if (!this.powered || this.state === 'CALIBRATING' || this._precisionMode) return;
+
+    if (!this.scale.calibrated && !this._pendingCalibration) {
+      this.currentG = 0;
+      if (this.display) this.display.setValue(0);
+      this._updateAccuracyDisplay(0);
+      this._setState('CAL REQUIRED');
+      return;
+    }
     
     this.currentG = grams;
     
@@ -365,7 +372,8 @@ class PhonewayApp {
   }
 
   _updateAccuracyDisplay(confidence) {
-    const accPct = Math.min(100, Math.max(0, Math.round(confidence * 100)));
+    const evidence = this.scale.getAccuracyEvidence(confidence);
+    const accPct = Math.min(100, Math.max(0, Math.round(evidence.confidence * 100)));
 
     const accDigits = document.getElementById('accDigits');
     if (accDigits) accDigits.textContent = accPct;
@@ -383,33 +391,18 @@ class PhonewayApp {
     // Realistic precision estimate shown under the bar
     const precEl = document.getElementById('precEst');
     if (precEl) {
-      const cal    = this.scale.getCalibrationQuality();
-      const surf   = this.scale.getSurfaceQuality();
-      const pts    = cal.points;
-      const r2     = cal.r2 || 0;
       let text, color;
-
-      if (!this.scale.calibrated || pts === 0) {
-        text = 'UNCAL'; color = '#444';
-      } else if (pts === 1) {
-        if (surf === 'excellent')     { text = '~±0.3g'; color = '#e8c84a'; }
-        else if (surf === 'good')     { text = '~±0.5g'; color = '#ffcc00'; }
-        else                          { text = '~±1g';   color = '#ff8c00'; }
-      } else if (pts === 2) {
-        // 2-point linear fit is always exact (r²=1) so use surface as proxy
-        if (surf === 'excellent')     { text = '~±0.2g'; color = '#39ff14'; }
-        else if (surf === 'good')     { text = '~±0.3g'; color = '#e8c84a'; }
-        else                          { text = '~±0.5g'; color = '#ffcc00'; }
+      if (!this.scale.calibrated) {
+        text = "CAL REQUIRED"; color = "#ff4444";
+      } else if (!evidence.verified) {
+        text = "VERIFY REQUIRED"; color = "#ff8c00";
       } else {
-        // 3+ points: r² is meaningful
-        if      (r2 > 0.97 && surf === 'excellent') { text = '~±0.1g'; color = '#00ff66'; }
-        else if (r2 > 0.92)                          { text = '~±0.2g'; color = '#39ff14'; }
-        else if (r2 > 0.85)                          { text = '~±0.3g'; color = '#e8c84a'; }
-        else                                         { text = '~±0.5g'; color = '#ffcc00'; }
+        text = "OBS ±" + evidence.uncertainty.toFixed(2) + "g";
+        color = evidence.tenthGramDemonstrated ? "#00ff66" :
+                evidence.uncertainty <= 0.5 ? "#e8c84a" : "#ff8c00";
       }
-
-      precEl.textContent  = text;
-      precEl.style.color  = color;
+      precEl.textContent = text;
+      precEl.style.color = color;
     }
   }
 
@@ -782,12 +775,23 @@ class PhonewayApp {
     document.getElementById('verifyTip').textContent = 
       `Grade ${result.grade} — ${result.isWithinTolerance ? 'Within tolerance' : 'Outside tolerance'}`;
     
-    this.scale.verifyAgainstKnown(this._selectedRefWeight.grams);
-    
     // Haptic feedback for pass
     if (result.isWithinTolerance) {
       hapticFeedback([20, 10, 20]);
     }
+    const verification = this.scale.verifyAgainstKnown(this._selectedRefWeight.grams);
+    if (!verification.valid) {
+      this._showToast(verification.error, 2500);
+      return;
+    }
+    this._sendTelemetry("verify", {
+      referenceGrams: verification.knownGrams,
+      errorGrams: verification.errorGrams,
+      errorPct: verification.errorPercent,
+      grade: verification.passed ? "PASS" : "FAIL",
+      accuracyGrade: Math.abs(verification.errorGrams) <= 0.1 ? "TENTH_GRAM" : "ABOVE_TENTH"
+    });
+    this._updateAccuracyDisplay(this.scale.confidence);
   }
 
   _lockReference() {

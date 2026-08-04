@@ -703,6 +703,33 @@ class SimpleScale {
   }
   
   /**
+   * Combine live signal quality with known-weight verification evidence.
+   * Repeatability alone never proves accuracy.
+   */
+  getAccuracyEvidence(signalConfidence = this.confidence) {
+    const signal = Math.max(0, Math.min(1, signalConfidence));
+    const history = this.verificationHistory;
+    if (!this.calibrated) return { confidence: 0, verified: false, uncertainty: Infinity, samples: 0 };
+    if (history.length === 0) {
+      return { confidence: Math.min(0.65, signal * 0.65), verified: false, uncertainty: Infinity, samples: 0 };
+    }
+    const errors = history.map(v => Math.abs(v.errorGrams));
+    const meanAbsoluteError = errors.reduce((sum, error) => sum + error, 0) / errors.length;
+    const worstError = Math.max(...errors);
+    const uncertainty = Math.max(meanAbsoluteError, worstError);
+    const evidenceScore = Math.max(0, 1 - uncertainty);
+    const sampleScore = Math.min(1, history.length / 3);
+    const confidence = signal * 0.55 + evidenceScore * 0.30 + sampleScore * 0.15;
+    return {
+      confidence: Math.min(history.length >= 3 ? 0.99 : 0.85, confidence),
+      verified: true,
+      uncertainty,
+      samples: history.length,
+      tenthGramDemonstrated: history.length >= 3 && worstError <= 0.1
+    };
+  }
+
+  /**
    * Get verification statistics
    */
   getVerificationStats() {

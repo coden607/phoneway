@@ -100,7 +100,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 
     <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
     <div id="accuracyBlock">
-      <div class="acc-label">ACCURACY</div>
+      <div class="acc-label">CONFIDENCE</div>
       <div class="acc-display">
         <div id="accDigits" class="acc-seg-wrap"></div>
         <div class="acc-pct-sign">%</div>
@@ -108,7 +108,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       <div class="acc-bar-wrap">
         <div class="acc-bar-fill" id="accBar"></div>
       </div>
-      <div id="precEst" class="prec-est">UNCAL</div>
+      <div id="precEst" class="prec-est">CAL REQUIRED</div>
       <div class="header-leds" style="margin-top:4px">
         <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
         <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
@@ -407,10 +407,10 @@ if (storedVersion && storedVersion !== APP_VERSION) {
     <div class="modal-sub">REFERENCE-WEIGHT CALIBRATION · REQUIRED FOR ACCURACY</div>
 
     <div class="cal-tip-box">
-      <p class="tip-headline">🎯 For 0.1 g accuracy — grab one of these:</p>
+      <p class="tip-headline">🎯 Known-weight calibration is required:</p>
       <div class="tip-coins">
         <div class="tip-coin">💵<br><strong>1.0 g</strong><br><small>Dollar bill</small></div>
-        <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny</small></div>
+        <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny (1983+)</small></div>
         <div class="tip-coin">🪙<br><strong>5.0 g</strong><br><small>Nickel ★</small></div>
         <div class="tip-coin">🪙<br><strong>5.67 g</strong><br><small>Quarter</small></div>
       </div>
@@ -438,7 +438,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 
     <div class="modal-btns">
       <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
-      <button class="modal-btn modal-btn-secondary" id="skipCalBtn">SKIP (ROUGH MODE)</button>
+      <p class="tip-note">0.1 g is display resolution. Verify three known weights within ±0.1 g before treating that performance as demonstrated on this device and surface.</p>
     </div>
   </div>
 </div>
