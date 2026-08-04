@@ -144,7 +144,7 @@ AGENTS.md                   (11.6 KB) - Project memory
 ## 🌐 Deployment
 
 ```
-✅ GitHub: airbearme/phoneway
+✅ GitHub: coden607/phoneway
 ✅ Version: 3.1.0
 ✅ Status: Production Ready
 ⏳ Vercel: Auto-deploy on push (requires secrets)

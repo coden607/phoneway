@@ -6,7 +6,7 @@ The GitHub Actions workflow is configured but needs secrets to enable auto-deplo
 
 ## ✅ GitHub Repo Connected
 
-Vercel CLI has connected your repo: `https://github.com/airbearme/phoneway`
+Vercel CLI has connected your repo: `https://github.com/coden607/phoneway`
 
 ## Updated Project IDs (from vercel link)
 

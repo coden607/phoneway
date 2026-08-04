@@ -39,7 +39,7 @@ The app is already deployed and live at:
 
 ### Safe Local Sync
 
-Use the repository sync command after authenticating GitHub as `airbearme`:
+Use the repository sync command after authenticating GitHub as `coden607`:
 
 ```bash
 ./scripts/sync-main.sh
