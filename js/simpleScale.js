@@ -324,6 +324,8 @@ class SimpleScale {
   constructor() {
     this.active = false;
     this.calibrated = false;
+    this.calibrationStale = false;
+    this.calibrationAgeMs = 0;
     this.baseline = null;
     this.sensitivity = 150;
 
@@ -735,7 +737,7 @@ class SimpleScale {
     const cal = this.getCalibrationQuality();
 
     if (!this.calibrated) {
-      return { confidence: 0, verified: false, uncertainty: Infinity, samples: 0, calibrationScore: 0 };
+      return { confidence: 0, verified: false, uncertainty: Infinity, samples: 0, calibrationScore: 0, precisionTier: "unverified" };
     }
 
     const calibrationScore = Math.max(0, Math.min(1, (cal.r2 || 0) * 0.7 + Math.min(cal.points, 4) / 4 * 0.3));
@@ -745,7 +747,8 @@ class SimpleScale {
         verified: false,
         uncertainty: Infinity,
         samples: 0,
-        calibrationScore
+        calibrationScore,
+        precisionTier: calibrationScore >= 0.9 && cal.points >= 3 ? "0.05g-potential" : "unverified"
       };
     }
 
@@ -758,13 +761,17 @@ class SimpleScale {
     const evidenceScore = Math.max(0, 1 - Math.min(1, uncertainty));
     const sampleScore = Math.min(1, history.length / 4);
     const confidence = signal * 0.40 + calibrationScore * 0.35 + evidenceScore * 0.20 + sampleScore * 0.05;
+    const tenthGramDemonstrated = history.length >= 3 && cal.points >= 2 && cal.r2 >= 0.95 && worstError <= 0.1;
+    const fiftyMilligramDemonstrated = history.length >= 5 && cal.points >= 3 && cal.r2 >= 0.98 && meanAbsoluteError <= 0.05 && stdDev <= 0.05 && worstError <= 0.075;
     return {
-      confidence: Math.min(history.length >= 3 ? 0.99 : 0.88, confidence),
+      confidence: Math.min(fiftyMilligramDemonstrated ? 0.995 : history.length >= 3 ? 0.99 : 0.88, confidence),
       verified: true,
       uncertainty,
       samples: history.length,
       calibrationScore,
-      tenthGramDemonstrated: history.length >= 3 && cal.points >= 2 && cal.r2 >= 0.95 && worstError <= 0.1
+      tenthGramDemonstrated,
+      fiftyMilligramDemonstrated,
+      precisionTier: fiftyMilligramDemonstrated ? "0.05g" : tenthGramDemonstrated ? "0.1g" : uncertainty <= 0.2 ? "0.2g" : "coarse"
     };
   }
 
@@ -841,7 +848,9 @@ class SimpleScale {
             max: Math.max(...trimmed),
             range: Math.max(...trimmed) - Math.min(...trimmed),
             sampleCount: trimmed.length,
-            confidence: Math.max(0, 1 - stdDev / 0.5)
+            confidence: Math.max(0, 1 - stdDev / 0.5),
+            targetAchieved: stdDev <= 0.05,
+            precisionTier: stdDev <= 0.05 ? "0.05g" : stdDev <= 0.1 ? "0.1g" : stdDev <= 0.2 ? "0.2g" : "coarse"
           });
         }
       }, 50);
@@ -943,9 +952,9 @@ class SimpleScale {
       
       if (saved) {
         const cal = JSON.parse(saved);
-        // Calibration valid for 30 days
-        if (cal.timestamp && Date.now() - cal.timestamp < 30 * 24 * 60 * 60 * 1000) {
-          if (cal.sensitivity && cal.baseline) {
+        if (cal.sensitivity && cal.baseline) {
+          this.calibrationAgeMs = cal.timestamp ? Math.max(0, Date.now() - cal.timestamp) : 0;
+          this.calibrationStale = this.calibrationAgeMs > 30 * 24 * 60 * 60 * 1000;
             this.sensitivity = cal.sensitivity;
             this.baseline = cal.baseline;
             this.calibrated = cal.calibrated || false;
@@ -960,11 +969,10 @@ class SimpleScale {
               this.verificationHistory = cal.verificationHistory;
             }
             
-            console.log('Loaded saved calibration:', this.getCalibrationQuality());
+            console.log('Loaded saved calibration:', this.getCalibrationQuality(), this.calibrationStale ? '(stale - recalibration recommended)' : '');
             return true;
           }
         }
-      }
     } catch (e) {
       console.log('Could not load calibration:', e);
     }

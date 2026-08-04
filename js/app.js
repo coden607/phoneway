@@ -90,6 +90,9 @@ class PhonewayApp {
     this._calFlowActive = false;
     this._calFlowStep = 0;
     this._calFlowStableCount = 0;
+    this._awaitingMotionPermission = false;
+    this._powerTransitioning = false;
+    this._powerButtonBusy = false;
     
     // Bind callbacks
     this.scale.onWeight = (g, conf, stable) => this._onWeight(g, conf, stable);
@@ -117,6 +120,7 @@ class PhonewayApp {
       this._updateAccuracyDisplay(0); // Initialize accuracy to 0
       this._updateCalibrationGuide(); // Initialize calibration guide
       this._bindButtons();
+      this._setPowerButtonBusy(false);
       this._buildCalWeightList();
       this._buildVerifyPanel();
       telemetry.logCapabilities({ version: APP_VERSION });
@@ -140,15 +144,15 @@ class PhonewayApp {
       
       // Request permission (especially for iOS)
       const permitted = await this._requestPermissions();
+      this._awaitingMotionPermission = !!(DeviceCapabilities.hasMotionPermission && !permitted);
       if (!permitted && DeviceCapabilities.hasMotionPermission) {
-        this._showToast("Motion permission required for scale to work", 5000);
+        this._showToast("Tap POWER to enable sensor access on iPhone", 5000);
         if (this.display) this.display.showError("PERM");
-        return;
       }
       
       // Auto-start after short delay
       setTimeout(() => {
-        if (!this._initError) {
+        if (!this._initError && !this._awaitingMotionPermission) {
           this._togglePower();
         }
       }, 800);
@@ -291,8 +295,24 @@ class PhonewayApp {
   _setState(s) {
     this.state = s;
     const el = document.getElementById('statusText');
-    if (el) el.textContent = s;
-    
+    const stableLabel = document.getElementById('stableLabel');
+    const statusBar = document.getElementById('status-bar');
+    const displaySection = document.getElementById('display-section');
+    const stabilityBar = document.getElementById('stabilityBar');
+    const stateClass = s === 'MEASURING' ? 'measuring' : s === 'STABLE' ? 'stable' : s === 'CALIBRATING' ? 'calibrating' : s === 'ZEROING' ? 'zeroing' : s === 'PRECISION' ? 'precision' : s === 'READY' ? 'ready' : 'off';
+    const labelText = s === 'MEASURING' ? 'MOVING' : s === 'STABLE' ? 'LOCKED' : s === 'CALIBRATING' ? 'CAL' : s;
+    if (el) el.textContent = labelText;
+    if (stableLabel) stableLabel.textContent = labelText;
+    [statusBar, displaySection, stabilityBar, el, stableLabel].forEach((node) => {
+      if (!node) return;
+      node.classList.remove('state-off', 'state-ready', 'state-measuring', 'state-stable', 'state-calibrating', 'state-zeroing', 'state-precision');
+      node.classList.add('state-' + stateClass);
+    });
+    if (stabilityBar) {
+      stabilityBar.classList.toggle('stable', s === 'STABLE');
+      stabilityBar.classList.toggle('measuring', s === 'MEASURING');
+    }
+
     switch (s) {
       case 'READY':
         if (this.display && !this._holdActive) this.display.setValue(0);
@@ -314,32 +334,67 @@ class PhonewayApp {
     }
   }
 
-  _togglePower() {
-    console.log('[Phoneway] Toggle power clicked, current state:', this.powered);
-    this.powered = !this.powered;
-    
-    if (this.ledPower) {
-      this.powered ? this.ledPower.on('green') : this.ledPower.off();
+  _setPowerButtonBusy(busy, label) {
+    this._powerButtonBusy = busy;
+    const btn = document.getElementById("btnPower");
+    if (!btn) return;
+
+    btn.disabled = busy;
+    btn.setAttribute("aria-busy", busy ? "true" : "false");
+    btn.classList.toggle("is-busy", busy);
+
+    const labelEl = btn.querySelector(".btn-label");
+    if (labelEl) {
+      labelEl.textContent = label || (busy ? "WAIT" : "ON/OFF");
     }
-    
-    if (this.powered) {
-      try {
-        this.scale.start();
-        this._setState('READY');
-        this._showToast('Scale ready — place phone on soft surface', 3000);
-        hapticFeedback([30, 20, 30]);
-      } catch (e) {
-        console.error('Scale start error:', e);
-        this._showToast('Error starting scale: ' + e.message, 4000);
-        this.powered = false;
-        if (this.ledPower) this.ledPower.off();
+  }
+
+  async _togglePower() {
+    if (this._powerTransitioning) return;
+    this._powerTransitioning = true;
+    this._setPowerButtonBusy(true, this.powered ? "STOP" : "WAIT");
+
+    console.log('[Phoneway] Toggle power clicked, current state:', this.powered);
+
+    try {
+      if (!this.powered && this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
+        const permitted = await this._requestPermissions();
+        this._awaitingMotionPermission = !permitted;
+        if (!permitted) {
+          this._showToast('Sensor access denied - open Safari settings and try again', 5000);
+          if (this.display) this.display.showError('PERM');
+          return;
+        }
       }
-    } else {
-      this.scale.stop();
-      this._setState('OFF');
-      if (this.display) this.display.setValue(null);
-      if (this.ledStable) this.ledStable.off();
-      hapticFeedback([50]);
+
+      this.powered = !this.powered;
+
+      if (this.ledPower) {
+        this.powered ? this.ledPower.on('green') : this.ledPower.off();
+      }
+
+      if (this.powered) {
+        try {
+          this.scale.start();
+          this._setState('READY');
+          this._showToast('Scale ready — place phone on soft surface', 3000);
+          hapticFeedback([30, 20, 30]);
+        } catch (e) {
+          console.error('Scale start error:', e);
+          this._showToast('Error starting scale: ' + e.message, 4000);
+          this.powered = false;
+          if (this.ledPower) this.ledPower.off();
+        }
+      } else {
+        this.scale.stop();
+        this._setState('OFF');
+        if (this.display) this.display.setValue(null);
+        if (this.ledStable) this.ledStable.off();
+        hapticFeedback([50]);
+      }
+    } finally {
+      this._setPowerButtonBusy(false);
+      this._powerTransitioning = false;
     }
   }
 
@@ -378,7 +433,7 @@ class PhonewayApp {
             if (status) status.textContent = "STABLE · " + grams.toFixed(2) + "g · TAP CALIBRATE NOW";
           } else {
             button.disabled = true;
-            button.textContent = "WAITING FOR STABLE";
+            button.textContent = "WAITING FOR LOCK";
           }
         }
       }
@@ -451,10 +506,15 @@ class PhonewayApp {
         text = "CAL REQUIRED"; color = "#ff4444";
       } else if (!evidence.verified) {
         text = "VERIFY REQUIRED"; color = "#ff8c00";
+      } else if (evidence.fiftyMilligramDemonstrated) {
+        text = "0.05g VERIFIED"; color = "#00ff66";
+      } else if (evidence.tenthGramDemonstrated) {
+        text = "0.1g VERIFIED"; color = "#e8c84a";
+      } else if (evidence.precisionTier === "0.05g-potential") {
+        text = "0.05g POTENTIAL"; color = "#c77dff";
       } else {
         text = "OBS ±" + evidence.uncertainty.toFixed(2) + "g";
-        color = evidence.tenthGramDemonstrated ? "#00ff66" :
-                evidence.uncertainty <= 0.5 ? "#e8c84a" : "#ff8c00";
+        color = evidence.uncertainty <= 0.2 ? "#e8c84a" : "#ff8c00";
       }
       precEl.textContent = text;
       precEl.style.color = color;
@@ -704,7 +764,7 @@ class PhonewayApp {
 
     if (!overlay || !body || !status || !progress || !button) {
       this._setState("CALIBRATING");
-      this._showToast("Step 1: Remove all weight — taring...", 9000);
+      this._showToast("Step 1: Clear the phone completely — taring...", 9000);
       await this.scale.tare();
       this._showToast("Step 2: Place " + this.calWeightG + "g weight, then press TARE to calibrate", 12000);
       this._pendingCalibration = true;
@@ -723,20 +783,20 @@ class PhonewayApp {
     const render = (step) => {
       const steps = {
         1: {
-          body: "STEP 1\n\nRemove all weight from the phone, then tap START TARE. The app will zero the baseline first.",
-          status: "REMOVE ALL WEIGHT",
+          body: "STEP 1\n\nClear the phone completely, then tap START TARE to zero the baseline.",
+          status: "CLEAR THE PHONE",
           progress: "33%",
           button: "START TARE"
         },
         2: {
-          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g weight on the phone and keep it still. The app will unlock the next step when the reading settles.",
-          status: "WAIT FOR STABLE READING",
+          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g weight on the phone and keep it still. The reading will unlock the next step when it settles.",
+          status: "WAIT FOR LOCK",
           progress: "66%",
-          button: "WAITING FOR STABLE"
+          button: "WAITING FOR LOCK"
         },
         3: {
-          body: "STEP 3\n\nThe reading is stable. Tap CALIBRATE NOW to lock it in.",
-          status: "READY TO CALIBRATE",
+          body: "STEP 3\n\nThe reading is steady. Tap CALIBRATE NOW to save this weight into the calibration curve.",
+          status: "READY TO SAVE",
           progress: "100%",
           button: "CALIBRATE NOW"
         }
@@ -845,8 +905,9 @@ class PhonewayApp {
       this._setState('STABLE');
       
       const accuracy = (result.confidence * 100).toFixed(1);
+      const tier = result.precisionTier === "0.05g" ? "0.05g VERIFIED" : result.precisionTier === "0.1g" ? "0.1g VERIFIED" : result.precisionTier === "0.2g" ? "0.2g" : "coarse";
       this._showToast(
-        `Result: ${result.grams.toFixed(2)}g (σ=${result.stdDev.toFixed(3)}g, ${accuracy}% conf)`,
+        "Result: " + result.grams.toFixed(2) + "g (" + tier + ", σ=" + result.stdDev.toFixed(3) + "g, " + accuracy + "% conf)",
         5000
       );
       
@@ -948,6 +1009,65 @@ class PhonewayApp {
     this._updateAccuracyDisplay(this.scale.confidence);
   }
 
+  _getAutoImproveState() {
+    try {
+      return this.storage.getObject("phoneway_auto_improve");
+    } catch {
+      return null;
+    }
+  }
+
+  _autoImproveFromHealth(recommendations, summary) {
+    const verifStats = this.scale.getVerificationStats();
+    if (!this.scale.calibrated || !verifStats || verifStats.totalVerifications < 5) return null;
+
+    const bias = Number(verifStats.meanError || 0);
+    const biasMagnitude = Math.abs(bias);
+    const actionable = recommendations.some(rec => rec.type === "sensitivity_adjustment" || rec.type === "nonlinearity");
+    if (!actionable || biasMagnitude < 0.08) return null;
+
+    const lastAuto = this._getAutoImproveState();
+    if (lastAuto && lastAuto.lastAppliedAt && (Date.now() - lastAuto.lastAppliedAt) < 24 * 60 * 60 * 1000) return null;
+
+    const multiplier = Math.max(0.985, Math.min(1.015, 1 - (bias / 20)));
+    const before = this.scale.sensitivity;
+    const after = Math.max(10, Math.min(1000, before * multiplier));
+    if (Math.abs(after - before) < 0.5) return null;
+
+    this.scale.sensitivity = after;
+    try {
+      if (typeof this.scale._saveCalibration === "function") this.scale._saveCalibration();
+    } catch {}
+
+    const record = {
+      lastAppliedAt: Date.now(),
+      beforeSensitivity: before,
+      afterSensitivity: after,
+      multiplier,
+      biasGrams: bias,
+      source: "verification_history",
+      recommendationCount: recommendations.length,
+      summaryVersion: summary.version
+    };
+
+    try {
+      this.storage.setObject("phoneway_auto_improve", record);
+    } catch {}
+
+    try {
+      telemetry.log("auto_improve", {
+        beforeSensitivity: Math.round(before * 10) / 10,
+        afterSensitivity: Math.round(after * 10) / 10,
+        multiplier: Math.round(multiplier * 10000) / 10000,
+        biasGrams: Math.round(bias * 1000) / 1000,
+        reason: bias > 0 ? "overread" : "underread",
+        totalVerifications: verifStats.totalVerifications
+      });
+    } catch {}
+
+    return record;
+  }
+
   _runScheduledHealthPass() {
     telemetry.fetchGlobalStats().catch(() => {});
 
@@ -962,14 +1082,22 @@ class PhonewayApp {
       }))
     };
 
+    const autoImprove = this._autoImproveFromHealth(recommendations, summary);
+    if (autoImprove) summary.autoImprove = autoImprove;
+
     try {
       telemetry.log("health_review", summary);
     } catch {}
 
-    if (recommendations.length > 0) {
+    if (recommendations.length > 0 || autoImprove) {
       try {
         this.storage.setObject("phoneway_last_health_review", summary);
       } catch {}
+    }
+
+    if (autoImprove && document.visibilityState === "visible") {
+      const deltaPct = Math.abs((autoImprove.multiplier - 1) * 100).toFixed(2);
+      this._showToast('Auto-improve applied: sensitivity ' + deltaPct + '%', 3500);
     }
   }
 
@@ -1021,6 +1149,7 @@ class PhonewayApp {
   _updateStats() {
     const calQuality = this.scale.getCalibrationQuality();
     const verifStats = this.scale.getVerificationStats();
+    const evidence = this.scale.getAccuracyEvidence();
     
     let grade = '—';
     let gradeDesc = 'Calibrate to achieve accuracy';
@@ -1042,6 +1171,9 @@ class PhonewayApp {
         grade = 'D';
         gradeDesc = 'Poor accuracy — recalibration required';
       }
+      if (this.scale.calibrationStale) {
+        gradeDesc += ' — recalibration recommended; saved history retained';
+      }
     }
     
     const gradeDisplay = document.getElementById('accGradeDisplay');
@@ -1053,7 +1185,11 @@ class PhonewayApp {
     const surface = this.scale.getSurfaceQuality();
     const precisionEl = document.getElementById('accPrecision');
     if (precisionEl) {
-      if (calQuality.r2 > 0.95) {
+      if (evidence.fiftyMilligramDemonstrated) {
+        precisionEl.textContent = '~±0.05g';
+      } else if (evidence.tenthGramDemonstrated) {
+        precisionEl.textContent = '~±0.1g';
+      } else if (calQuality.r2 > 0.95) {
         precisionEl.textContent = surface === 'excellent' ? '~±0.2g' : '~±0.3g';
       } else if (calQuality.r2 > 0.90) {
         precisionEl.textContent = '~±0.5g';
@@ -1085,6 +1221,9 @@ class PhonewayApp {
     const recList = document.getElementById('accRecList');
     if (recList) {
       const recs = [];
+      if (evidence.precisionTier === "0.05g-potential") {
+        recs.push("• 0.05 g is close; add another clean verification pass");
+      }
       if (calQuality.points < 3) {
         recs.push(`• Add ${3 - calQuality.points} more calibration points for better accuracy`);
       }

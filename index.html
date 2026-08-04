@@ -160,7 +160,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       </div>
       <div class="cal-step" id="calStep2">
         <span class="step-num">2</span>
-        <span class="step-text">Remove all weight & press TARE</span>
+        <span class="step-text">Clear the phone & press TARE</span>
       </div>
       <div class="cal-step" id="calStep3">
         <span class="step-num">3</span>
@@ -168,7 +168,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       </div>
       <div class="cal-step" id="calStep4">
         <span class="step-num">4</span>
-        <span class="step-text">Press TARE to calibrate</span>
+        <span class="step-text">Press TARE to save</span>
       </div>
     </div>
     <div class="cal-tip">
@@ -404,28 +404,28 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 <div class="overlay" id="onboardModal">
   <div class="modal-card">
     <div class="modal-title">PRECISION SETUP</div>
-    <div class="modal-sub">REFERENCE-WEIGHT CALIBRATION · REQUIRED FOR ACCURACY</div>
+    <div class="modal-sub">ONE-TIME SETUP FOR THIS PHONE AND SURFACE</div>
 
     <div class="cal-tip-box">
-      <p class="tip-headline">🎯 Best accuracy: use a certified calibration weight if you have one. Otherwise use a nickel (5g) + a dollar bill (1g).</p>
+      <p class="tip-headline">Use a certified calibration weight if you have one. If not, a nickel (5 g) plus a dollar bill (1 g) is enough to get started.</p>
       <div class="tip-coins">
         <div class="tip-coin">💵<br><strong>1.0 g</strong><br><small>Dollar bill</small></div>
         <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny (1983+)</small></div>
         <div class="tip-coin">🪙<br><strong>5.0 g</strong><br><small>Nickel ★</small></div>
         <div class="tip-coin">🪙<br><strong>5.67 g</strong><br><small>Quarter</small></div>
       </div>
-      <p class="tip-note">Use known weights only. Avoid coins with worn edges or uncertain mass if you want the tightest calibration.</p>
+      <p class="tip-note">Known weights only. Avoid worn coins or loose items if you want the tightest calibration.</p>
     </div>
 
     <div class="cal-checklist">
       <div class="cal-checklist-title">ACCURACY CHECKLIST</div>
       <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Phone flat, face-up, and not tilted.</span></div>
       <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Use a soft surface: mouse pad, folded cloth, or thick notebook.</span></div>
-      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Do not charge the phone during calibration or weighing.</span></div>
-      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Verify at least three recommended weights within ±0.1 g before trusting tenth-gram results.</span></div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Allow sensor access when Safari asks, then keep the phone still.</span></div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Verify at least three known weights before trusting tenth-gram results.</span></div>
     </div>
 
-    <p class="modal-instr">Select the exact reference you will place on the phone:</p>
+    <p class="modal-instr">Select the reference you will place on the phone:</p>
     <div class="cal-weight-list"></div>
 
     <div class="custom-weight-row">
@@ -435,14 +435,14 @@ if (storedVersion && storedVersion !== APP_VERSION) {
     </div>
 
     <div class="surface-tip">
-      <strong>📱 Surface tip:</strong> Place phone on a mouse-pad, notebook, or folded
-      cloth — never on a hard table. The soft surface is what the sensor detects deflecting.
+      <strong>📱 Surface tip:</strong> Place the phone on a mouse-pad, notebook, or folded
+      cloth. The softer the surface, the better the reading.
     </div>
 
     <div class="cal-progress-wrap"><div id="calProgress"></div></div>
 
     <div class="modal-btns modal-btns-accuracy">
-      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START ACCURATE CALIBRATION</button>
+      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
       <p class="tip-note">0.1 g is display resolution. Verify three known weights within ±0.1 g before treating that performance as demonstrated on this device and surface.</p>
     </div>
   </div>
@@ -454,7 +454,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="stepOverlay" style="display:none">
   <div class="modal-card step-card">
-    <div class="step-title modal-title">CALIBRATING…</div>
+    <div class="step-title modal-title">CALIBRATION WALKTHROUGH</div>
     <pre class="step-body"></pre>
     <div class="cal-progress-wrap" style="margin-top:16px">
       <div id="calStepProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px;width:0%"></div>
@@ -726,7 +726,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       + '<b>Message:</b><br>' + String(msg) + '<br><br>'
       + '<b>File:</b> ' + (src || '') + (line ? ':' + line : '') + '<br><br>'
       + '<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + String(msg).replace(/'/g,"\\'") + '\').then(function(){alert(\'Copied!\')})" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;margin-right:8px">📋 COPY</button>'
-      + '<button onclick="localStorage.clear();location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer">🔄 RESET</button>';
+      + '<button onclick="location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer">↻ RELOAD APP</button>';
     document.body.appendChild(d);
   }
 
@@ -847,7 +847,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       <div class="guide-issue"><strong>Display drifts with nothing on it:</strong> Thermal drift from charging. Unplug and wait 5 min, then re-TARE.</div>
       <div class="guide-issue"><strong>Won't read below 1g:</strong> Surface too hard. Switch to a mouse pad or folded cloth.</div>
       <div class="guide-issue"><strong>Accuracy worse than ±0.5g after cal:</strong> Add a second calibration point (use CAL again with a different weight).</div>
-      <div class="guide-issue"><strong>No sensor reading / always 0:</strong> Motion permission denied — check browser/site settings and reload.</div>
+      <div class="guide-issue"><strong>No sensor reading / always 0:</strong> Sensor access denied — check browser/site settings and reload.</div>
       <div class="guide-issue"><strong>Noisy / jumping display:</strong> External vibration (fan, traffic). Move to a still location or use 0.1g PRECISION mode.</div>
       <div class="guide-issue"><strong>iOS — no permission prompt:</strong> Open in Safari (not in-app browser). Tap Share → Add to Home Screen.</div>
     </div>
