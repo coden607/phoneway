@@ -27,12 +27,16 @@ jobs:
       - name: Clear Vercel linkage
         run: rm -rf .vercel
 
+      - name: Link Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel@25.1.0 link --yes --scope stephens-projects-8fbc16d0 --project "$VERCEL_PROJECT_ID" --cwd ./ --token "$VERCEL_TOKEN"
+
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx vercel@25.1.0 deploy --prod --token "$VERCEL_TOKEN" --cwd ./ --project "$VERCEL_PROJECT_ID" --scope stephens-projects-8fbc16d0
+        run: npx vercel@25.1.0 deploy --prod --token "$VERCEL_TOKEN" --cwd ./
 
       - name: Notify Success
         if: success()
