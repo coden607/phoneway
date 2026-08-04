@@ -27,3 +27,7 @@ Open the project in a static server or your preferred dev environment, then load
 - `DEPLOYMENT.md`
 - `SETUP_GITHUB_SECRETS.md`
 - `AGENTS.md`
+
+## Disclaimer
+
+Phoneway is intended for lawful, personal, and educational use only. Do not use it for illegal activity or to violate local laws, regulations, or property rules.

@@ -407,17 +407,22 @@ if (storedVersion && storedVersion !== APP_VERSION) {
     <div class="modal-sub">REFERENCE-WEIGHT CALIBRATION · REQUIRED FOR ACCURACY</div>
 
     <div class="cal-tip-box">
-      <p class="tip-headline">🎯 Known-weight calibration is required:</p>
+      <p class="tip-headline">🎯 Best accuracy: use a nickel (5g) + a dollar bill (1g).</p>
       <div class="tip-coins">
         <div class="tip-coin">💵<br><strong>1.0 g</strong><br><small>Dollar bill</small></div>
         <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny (1983+)</small></div>
         <div class="tip-coin">🪙<br><strong>5.0 g</strong><br><small>Nickel ★</small></div>
         <div class="tip-coin">🪙<br><strong>5.67 g</strong><br><small>Quarter</small></div>
       </div>
-      <p class="tip-note">
-        ⚡ Best accuracy: use a <strong>nickel (5g)</strong> + a <strong>dollar bill (1g)</strong>
-        for a 2-point calibration. Then keep them as your reference weights.
-      </p>
+      <p class="tip-note">Use known weights only. Avoid coins with worn edges or uncertain mass if you want the tightest calibration.</p>
+    </div>
+
+    <div class="cal-checklist">
+      <div class="cal-checklist-title">ACCURACY CHECKLIST</div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Phone flat, face-up, and not tilted.</span></div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Use a soft surface: mouse pad, folded cloth, or thick notebook.</span></div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Do not charge the phone during calibration or weighing.</span></div>
+      <div class="cal-checklist-item"><span class="cal-checkmark">✓</span><span>Verify at least three known weights within ±0.1 g before trusting tenth-gram results.</span></div>
     </div>
 
     <p class="modal-instr">Select the exact reference you will place on the phone:</p>
@@ -436,8 +441,8 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 
     <div class="cal-progress-wrap"><div id="calProgress"></div></div>
 
-    <div class="modal-btns">
-      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
+    <div class="modal-btns modal-btns-accuracy">
+      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START ACCURATE CALIBRATION</button>
       <p class="tip-note">0.1 g is display resolution. Verify three known weights within ±0.1 g before treating that performance as demonstrated on this device and surface.</p>
     </div>
   </div>
@@ -458,10 +463,6 @@ if (storedVersion && storedVersion !== APP_VERSION) {
     <button id="calReadyBtn" class="modal-btn btn-ready"
             style="display:none;margin-top:14px;width:100%">
       ✓ I'M READY
-    </button>
-    <button id="calSkipBtn" class="modal-btn modal-btn-secondary"
-            style="display:none;margin-top:8px;width:100%;font-size:8px">
-      SKIP THIS STEP →
     </button>
   </div>
 </div>
@@ -853,6 +854,11 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 
     <div style="text-align:center;color:#333;font-size:9px;margin-top:8px;letter-spacing:1px">
       TAP THE ACCURACY DISPLAY IN THE HEADER TO REOPEN THIS GUIDE
+    </div>
+
+    <div style="text-align:center;color:#666;font-size:9px;margin-top:10px;line-height:1.5">
+      Phoneway is intended for lawful, personal, and educational use only.<br>
+      Do not use it for illegal activity or to violate local laws, regulations, or property rules.
     </div>
   </div>
 

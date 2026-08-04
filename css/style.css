@@ -1104,6 +1104,33 @@ html, body {
 .s-lbl   { font-size: 7px; letter-spacing: 1px; color: #444; min-width: 36px; }
 
 /* ── Calibration tip box ────────────────────────────────────── */
+.cal-checklist {
+  background: #101010;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.cal-checklist-title {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--gold-light);
+  margin-bottom: 8px;
+}
+.cal-checklist-item {
+  display: flex;
+  gap: 8px;
+  font-size: 9px;
+  line-height: 1.55;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+.cal-checklist-item:last-child { margin-bottom: 0; }
+.cal-checkmark { color: var(--gold-light); flex: 0 0 auto; }
+.modal-btns-accuracy { grid-template-columns: 1fr; }
+.modal-btns-accuracy .tip-note { grid-column: 1 / -1; text-align: center; margin-top: 2px; }
+
+/* ── Calibration tip box ────────────────────────────────────── */
 .cal-tip-box {
   background: #0f0f00;
   border: 1px solid var(--gold-dark);

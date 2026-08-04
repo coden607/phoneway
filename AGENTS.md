@@ -257,6 +257,7 @@ accuracy = conf*0.40 + stability*0.35 + calScore*0.15 + surfaceScore*0.10
 - `phoneway_v4_calibration` — calibration settings (includes `cameraBaselineFreq`)
 - `phoneway_v4.1.1_version` — version tracking for updates
 - `phoneway_savedRef` — user-locked reference weight (grams)
+
 - `phoneway_verifyHistory` — last 10 verify sessions
 - `phoneway_ml_model` — neural network weights
 - `phoneway_error_log` — error history (1000 entries max)
@@ -264,6 +265,10 @@ accuracy = conf*0.40 + stability*0.35 + calScore*0.15 + surfaceScore*0.10
 **Memory Fallback**: When localStorage is unavailable (private mode), data stored in `window._phonewayCal`.
 
 ---
+
+## Disclaimer
+
+Phoneway is intended for lawful, personal, and educational use only. Do not use it for illegal activity or to violate local laws, regulations, or property rules.
 
 ## 🧪 Physics Background
 
