@@ -1,1 +1,11 @@
 .vercel
+.env*
+!.env.example
+node_modules/
+dist/
+coverage/
+.vite/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
