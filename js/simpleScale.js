@@ -520,10 +520,12 @@ class SimpleScale {
     this.stabilityCheck.update(rawG);
 
     const stdDev     = this.stabilityCheck.stdDev;
-    const isNowStable = this.stabilityCheck.isFull && stdDev < 0.08;
+    const stabilityThreshold = this.calibrated ? 0.06 : 0.08;
+    const stableSamplesRequired = this.calibrated ? 30 : 25;
+    const isNowStable = this.stabilityCheck.isFull && stdDev < stabilityThreshold;
 
     if (isNowStable) { this.stableCounter++; } else { this.stableCounter = 0; }
-    const trulyStable = this.stableCounter > 25;
+    const trulyStable = this.stableCounter > stableSamplesRequired;
 
     const emaG = this.emaWeight.update(rawG);
 
@@ -667,38 +669,59 @@ class SimpleScale {
   /**
    * Verify current reading against known weight
    */
-  verifyAgainstKnown(knownGrams) {
+  verifyAgainstKnown(knownWeight, options = {}) {
     if (!this.isStable) {
       return { valid: false, error: 'Wait for stable reading' };
     }
-    
+
+    const reference = typeof knownWeight === 'object' && knownWeight !== null
+      ? knownWeight
+      : { grams: knownWeight, tolerance: options.tolerance ?? 0.1, name: options.name ?? 'Known weight' };
+
+    const knownGrams = Number(reference.grams);
+    if (!Number.isFinite(knownGrams) || knownGrams <= 0) {
+      return { valid: false, error: 'Choose a valid reference weight' };
+    }
+
+    const tolerance = Number.isFinite(reference.tolerance) ? reference.tolerance : 0.1;
+    const strictTarget = Math.min(tolerance, 0.1);
     const measured = this.displayWeight;
-    const error = measured - knownGrams;
-    const errorPercent = (error / knownGrams) * 100;
-    const accuracy = 100 - Math.abs(errorPercent);
-    
+    const errorGrams = measured - knownGrams;
+    const absError = Math.abs(errorGrams);
+    const errorPercent = (errorGrams / knownGrams) * 100;
+    const accuracy = Math.max(0, 100 - Math.abs(errorPercent));
+    const withinTolerance = absError <= tolerance;
+    const tenthGramPassed = absError <= strictTarget;
+
     const result = {
       valid: true,
+      reference,
       knownGrams,
       measuredGrams: measured,
-      errorGrams: error,
-      errorPercent: errorPercent,
-      accuracy: Math.max(0, accuracy),
-      passed: Math.abs(error) < 0.5, // Within 0.5g is pass
+      errorGrams,
+      error: errorGrams,
+      errorPercent,
+      tolerance,
+      strictTolerance: strictTarget,
+      accuracy,
+      isWithinTolerance: withinTolerance,
+      passed: tenthGramPassed,
       timestamp: Date.now()
     };
-    
-    // Add to history
-    this.verificationHistory.push(result);
+
+    this.verificationHistory.push({
+      ...result,
+      absError,
+      withinTolerance,
+      tenthGramPassed
+    });
     if (this.verificationHistory.length > 20) {
       this.verificationHistory.shift();
     }
-    
-    // Learn from verification
+
     this.tempComp.learnDrift(measured);
-    
     this._saveCalibration();
-    
+
     return result;
   }
   
@@ -709,23 +732,39 @@ class SimpleScale {
   getAccuracyEvidence(signalConfidence = this.confidence) {
     const signal = Math.max(0, Math.min(1, signalConfidence));
     const history = this.verificationHistory;
-    if (!this.calibrated) return { confidence: 0, verified: false, uncertainty: Infinity, samples: 0 };
-    if (history.length === 0) {
-      return { confidence: Math.min(0.65, signal * 0.65), verified: false, uncertainty: Infinity, samples: 0 };
+    const cal = this.getCalibrationQuality();
+
+    if (!this.calibrated) {
+      return { confidence: 0, verified: false, uncertainty: Infinity, samples: 0, calibrationScore: 0 };
     }
-    const errors = history.map(v => Math.abs(v.errorGrams));
+
+    const calibrationScore = Math.max(0, Math.min(1, (cal.r2 || 0) * 0.7 + Math.min(cal.points, 4) / 4 * 0.3));
+    if (history.length === 0) {
+      return {
+        confidence: Math.min(0.7, signal * 0.55 + calibrationScore * 0.45),
+        verified: false,
+        uncertainty: Infinity,
+        samples: 0,
+        calibrationScore
+      };
+    }
+
+    const errors = history.map(v => Math.abs(v.errorGrams ?? v.error ?? 0));
     const meanAbsoluteError = errors.reduce((sum, error) => sum + error, 0) / errors.length;
+    const variance = errors.reduce((sum, error) => sum + (error - meanAbsoluteError) ** 2, 0) / errors.length;
+    const stdDev = Math.sqrt(Math.max(0, variance));
     const worstError = Math.max(...errors);
-    const uncertainty = Math.max(meanAbsoluteError, worstError);
-    const evidenceScore = Math.max(0, 1 - uncertainty);
-    const sampleScore = Math.min(1, history.length / 3);
-    const confidence = signal * 0.55 + evidenceScore * 0.30 + sampleScore * 0.15;
+    const uncertainty = Math.max(meanAbsoluteError + stdDev * 0.5, worstError);
+    const evidenceScore = Math.max(0, 1 - Math.min(1, uncertainty));
+    const sampleScore = Math.min(1, history.length / 4);
+    const confidence = signal * 0.40 + calibrationScore * 0.35 + evidenceScore * 0.20 + sampleScore * 0.05;
     return {
-      confidence: Math.min(history.length >= 3 ? 0.99 : 0.85, confidence),
+      confidence: Math.min(history.length >= 3 ? 0.99 : 0.88, confidence),
       verified: true,
       uncertainty,
       samples: history.length,
-      tenthGramDemonstrated: history.length >= 3 && worstError <= 0.1
+      calibrationScore,
+      tenthGramDemonstrated: history.length >= 3 && cal.points >= 2 && cal.r2 >= 0.95 && worstError <= 0.1
     };
   }
 

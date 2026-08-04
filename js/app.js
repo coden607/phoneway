@@ -779,7 +779,7 @@ class PhonewayApp {
     if (result.isWithinTolerance) {
       hapticFeedback([20, 10, 20]);
     }
-    const verification = this.scale.verifyAgainstKnown(this._selectedRefWeight.grams);
+    const verification = this.scale.verifyAgainstKnown(this._selectedRefWeight);
     if (!verification.valid) {
       this._showToast(verification.error, 2500);
       return;
@@ -789,7 +789,7 @@ class PhonewayApp {
       errorGrams: verification.errorGrams,
       errorPct: verification.errorPercent,
       grade: verification.passed ? "PASS" : "FAIL",
-      accuracyGrade: Math.abs(verification.errorGrams) <= 0.1 ? "TENTH_GRAM" : "ABOVE_TENTH"
+      accuracyGrade: verification.passed ? "TENTH_GRAM" : "ABOVE_TENTH"
     });
     this._updateAccuracyDisplay(this.scale.confidence);
   }
