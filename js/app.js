@@ -15,6 +15,7 @@
 'use strict';
 
 import { SimpleScale, MovingAverage } from './simpleScale.js';
+import { BackgroundSensorFusion } from './backgroundFusion.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
 import { 
   ALL_REFERENCE_WEIGHTS, 
@@ -63,6 +64,9 @@ class PhonewayApp {
     
     try {
       this.permissions = new PermissionHelper();
+      this.backgroundFusion = new BackgroundSensorFusion({
+        onUpdate: (count) => this._updateSensorBar('touchBar', Math.min(1, count / 3))
+      });
       console.log('[Phoneway] PermissionHelper created');
     } catch (e) {
       console.error('[Phoneway] Failed to create PermissionHelper:', e);
@@ -95,7 +99,10 @@ class PhonewayApp {
     this._powerButtonBusy = false;
     
     // Bind callbacks
-    this.scale.onWeight = (g, conf, stable) => this._onWeight(g, conf, stable);
+    this.scale.onWeight = (g, conf, stable) => {
+      const fused = this.backgroundFusion.fusePrimary(g, conf, stable);
+      this._onWeight(fused.grams, fused.confidence, fused.stable);
+    };
     this.scale.onStable = (g) => this._onStableReading(g);
     
     // Bind error handler
@@ -376,6 +383,7 @@ class PhonewayApp {
       if (this.powered) {
         try {
           this.scale.start();
+          this.backgroundFusion.start().catch(() => {});
           this._setState('READY');
           this._showToast('Scale ready — place phone on soft surface', 3000);
           hapticFeedback([30, 20, 30]);
@@ -387,6 +395,7 @@ class PhonewayApp {
         }
       } else {
         this.scale.stop();
+        this.backgroundFusion.stop();
         this._setState('OFF');
         if (this.display) this.display.setValue(null);
         if (this.ledStable) this.ledStable.off();
