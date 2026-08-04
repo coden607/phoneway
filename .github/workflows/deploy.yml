@@ -31,7 +31,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx vercel@58.4.4 link --yes --scope stephens-projects-8fbc16d0 --project "$VERCEL_PROJECT_ID" --cwd ./ --token "$VERCEL_TOKEN"
+        run: npx vercel@58.4.4 link --yes --project "$VERCEL_PROJECT_ID" --cwd ./ --token "$VERCEL_TOKEN"
 
       - name: Deploy to Vercel
         env:
