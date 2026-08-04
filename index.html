@@ -11,7 +11,7 @@
   <title>Phoneway v4.1 — Ultra-Precision Scale</title>
   <link rel="manifest"          href="manifest.json?v=4.1.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=4.2.0"/>
+  <link rel="stylesheet"        href="css/style.css?v=4.3.0"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -68,7 +68,7 @@
 
 <script>
 // Version check and auto-update
-const APP_VERSION = '4.1.2';
+const APP_VERSION = '4.3.0';
 const storedVersion = localStorage.getItem('phoneway_version');
 if (storedVersion && storedVersion !== APP_VERSION) {
   if ('caches' in window) {
@@ -1034,14 +1034,14 @@ if (gcb) gcb.addEventListener('click', closeGuide);
 </script>
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=4.2.0"></script>
+<script type="module" src="js/app.js?v=4.3.0"></script>
 
 <!-- Service Worker Registration -->
 <script>
 (function() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js?v=4.2.0')
+      navigator.serviceWorker.register('/sw.js?v=4.3.0')
         .then(function(registration) {
           console.log('[SW] Registered:', registration.scope);
           

@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v4.1.3-evidence';
+const CACHE = 'phoneway-v4.3.0-fusion';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -43,6 +43,7 @@ const ASSETS = [
   BASE + 'js/predictiveCalibration.js',
   BASE + 'js/telemetry.js',
   BASE + 'js/simpleScale.js',
+  BASE + 'js/backgroundFusion.js',
   BASE + 'js/referenceWeights.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',
@@ -90,6 +91,12 @@ self.addEventListener('fetch', e => {
     return;
   }
   
+  const isNavigation = e.request.mode === "navigate" || e.request.destination === "document";
+  if (isNavigation) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) {
