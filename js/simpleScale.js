@@ -13,6 +13,8 @@
 
 'use strict';
 
+import { TiltCorrector } from './sensorCombinations.js';
+
 /**
  * Advanced moving average with variance tracking
  */
@@ -331,6 +333,7 @@ class SimpleScale {
 
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
+    this.tiltCorrector = new TiltCorrector();
 
     this.rawAccel      = { x: 0, y: 0, z: 9.8 };
     this.filteredAccel = { x: 0, y: 0, z: 9.8 };
@@ -430,6 +433,8 @@ class SimpleScale {
       z: this.kalmanZ.update(z)
     };
 
+    this.tiltCorrector.feedGravity(this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z);
+
     // Reject impulsive movement and rotation before it can look like weight.
     const jerk = Math.hypot(
       x - this.filteredAccel.x,
@@ -502,6 +507,7 @@ class SimpleScale {
 
     const dx = this.filteredAccel.x - this.baseline.x;
     const dy = this.filteredAccel.y - this.baseline.y;
+    const dz = this.filteredAccel.z - this.baseline.z;
 
     // Average signed deltas FIRST, then compute magnitude
     const avgDx = this.maDx.update(dx);
@@ -514,6 +520,18 @@ class SimpleScale {
 
     rawG = Math.max(0, rawG);
     rawG = Math.max(0, this.tempComp.compensate(rawG));
+
+    // Fuse horizontal, tilt-corrected, and vertical motion channels conservatively.
+    const tiltG = Math.max(0, this.tiltCorrector.correctGrams(rawG));
+    const verticalG = Math.max(0, Math.abs(dz) * 180);
+    const verticalConfidence = Math.min(0.35, verticalG > 0.05 ? 0.35 : 0);
+    const candidates = [rawG, tiltG];
+    if (verticalConfidence > 0) candidates.push(verticalG);
+    candidates.sort((a, b) => a - b);
+    const medianG = candidates[Math.floor(candidates.length / 2)];
+    const agreeing = candidates.filter(value => Math.abs(value - medianG) <= Math.max(0.15, medianG * 0.25));
+    const disagreement = Math.max(...candidates) - Math.min(...candidates);
+    rawG = agreeing.reduce((sum, value) => sum + value, 0) / agreeing.length;
 
     // 0.05 g noise floor
     if (rawG < 0.05) rawG = 0;
@@ -545,13 +563,14 @@ class SimpleScale {
     // Confidence — calibration multiplier makes the % realistic:
     // uncalibrated max ~35%, 1-pt ~65%, 2-pt ~85%, 3-pt+ ~100%
     const stabilityScore = Math.max(0, 1 - stdDev / 0.15);
+    const fusionScore = Math.max(0, 1 - disagreement / Math.max(0.25, rawG * 0.35));
     const surfaceScore   = this._getSurfaceQualityScore();
     const signalScore    = this.calibrated ? 0.9 : Math.min(1, this.rawWeight / 2);
     const calPoints      = this.multiCal.getPointCount();
     const calMult        = !this.calibrated ? 0.35 :
                            (calPoints >= 3 ? 1.0 : calPoints >= 2 ? 0.85 : 0.70);
 
-    this.confidence = (stabilityScore * 0.45 + signalScore * 0.20 + surfaceScore * 0.25 + this.motionQuality * 0.10) * calMult;
+    this.confidence = (stabilityScore * 0.35 + fusionScore * 0.20 + signalScore * 0.15 + surfaceScore * 0.20 + this.motionQuality * 0.10) * calMult;
 
     if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, this.isStable);
   }
