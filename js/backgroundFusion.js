@@ -63,7 +63,8 @@ class BackgroundSensorFusion {
     const primary = candidates.find(channel => channel.name === "motion") || candidates[0];
     const agreeing = candidates.filter(channel => Math.abs(channel.grams - primary.grams) <= Math.max(0.5, Math.abs(primary.grams) * 0.25));
     const weightSum = agreeing.reduce((sum, channel) => sum + Math.max(0.05, channel.confidence), 0);
-    const fusedGrams = agreeing.reduce((sum, channel) => sum + channel.grams * Math.max(0.05, channel.confidence), 0) / weightSum;
+    const fusedGrams = primary.grams;
+    // Optional channels validate the primary estimate; they never move grams.
     const agreement = agreeing.length / candidates.length;
     const fusedConfidence = Math.max(0, Math.min(0.99, (confidence * 0.85 + agreement * 0.15) * this.gyroQuality * this.touchQuality));
 

@@ -552,8 +552,12 @@ class SimpleScale {
     this.isStable = trulyStable;
 
     // Deadband
-    if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.05) {
-      this.displayWeight    = emaG;
+    if (trulyStable) {
+      const stableMean = this._trimmedMean(this.stabilityCheck.getAll(), 0.15);
+      this.displayWeight = stableMean;
+      this.lastDisplayValue = stableMean;
+    } else if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.05) {
+      this.displayWeight = emaG;
       this.lastDisplayValue = emaG;
     }
 
