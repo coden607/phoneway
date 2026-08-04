@@ -31,6 +31,8 @@ import {
   hapticFeedback,
   getDeviceInfo
 } from './deviceCompat.js';
+import { telemetry } from './telemetry.js';
+import { globalErrorLogger } from '../data/error-logger.js';
 
 const UNITS = [
   { key: 'g',  label: 'g',  factor: 1,        places: 2 },
@@ -117,6 +119,10 @@ class PhonewayApp {
       this._bindButtons();
       this._buildCalWeightList();
       this._buildVerifyPanel();
+      telemetry.logCapabilities({ version: APP_VERSION });
+      this._runScheduledHealthPass();
+      if (this._healthTimer) clearInterval(this._healthTimer);
+      this._healthTimer = setInterval(() => this._runScheduledHealthPass(), 6 * 60 * 60 * 1000);
 
       // New devices need an explicit reference-weight calibration before use.
       if (!this.scale.calibrated) {
@@ -135,11 +141,9 @@ class PhonewayApp {
       // Request permission (especially for iOS)
       const permitted = await this._requestPermissions();
       if (!permitted && DeviceCapabilities.hasMotionPermission) {
-        this._showToast('Motion permission required for scale to work', 5000);
-        // Show a more prominent message in the display
-        if (this.display) this.display.showError('PERM');
+        this._showToast("Motion permission required for scale to work", 5000);
+        if (this.display) this.display.showError("PERM");
         return;
-    }
       }
       
       // Auto-start after short delay
@@ -167,12 +171,13 @@ class PhonewayApp {
     try {
       return await this.permissions.requestMotionPermission();
     } catch (e) {
-      console.warn('Permission request failed:', e);
+      console.warn("Permission request failed:", e);
+      try { telemetry.logPermissionDenied("motion"); } catch {}
       return !DeviceCapabilities.hasMotionPermission; // Return true if no permission needed
     }
   }
-  
-  _handleError(error, context = 'unknown') {
+
+  _handleError(error, context = "unknown") {
     const errorInfo = {
       message: (error && error.message) || String(error),
       context,
@@ -180,39 +185,45 @@ class PhonewayApp {
       timestamp: Date.now(),
       version: APP_VERSION
     };
-    
-    console.error('[Phoneway Error]', errorInfo);
-    
+
+    console.error("[Phoneway Error]", errorInfo);
+    try { telemetry.logJSError(errorInfo.message, context, 0, 0); } catch {}
+
     // Send error telemetry
-    this._sendTelemetry('js_error', {
+    this._sendTelemetry("js_error", {
       msg: errorInfo.message,
       context: context,
       v: APP_VERSION
     });
-    
+
     // Show user-friendly message for critical errors
-    if (context === 'init' || context === 'window') {
-      this._showToast('Error: ' + errorInfo.message.substring(0, 50), 4000);
+    if (context === "init" || context === "window") {
+      this._showToast("Error: " + errorInfo.message.substring(0, 50), 4000);
     }
   }
-  
-  _sendTelemetry(type, data) {
-    // Fire-and-forget telemetry
-    if (!DeviceCapabilities.hasServiceWorker) return;
-    
-    try {
-      fetch('/api/telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceClass: DeviceCapabilities.platform,
-          events: [{ type, data, timestamp: Date.now() }]
-        }),
-        keepalive: true
-      }).catch(() => {}); // Ignore errors
-    } catch (e) {}
-  }
 
+  _sendTelemetry(type, data) {
+    try {
+      telemetry.log(type, data);
+      if (type === "js_error" || type === "startup") {
+        telemetry.flush().catch(() => {});
+      }
+    } catch (e) {
+      if (!DeviceCapabilities.hasServiceWorker) return;
+
+      try {
+        fetch("/api/telemetry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceClass: DeviceCapabilities.platform,
+            events: [{ type, data, timestamp: Date.now() }]
+          }),
+          keepalive: true
+        }).catch(() => {});
+      } catch {}
+    }
+  }
   _initDisplay() {
     try {
       const digitDisplay = document.getElementById('digitDisplay');
@@ -373,7 +384,6 @@ class PhonewayApp {
       }
       return;
     }
-    }
 
     if (!this.scale.calibrated && !this._pendingCalibration) {
       this.currentG = 0;
@@ -381,7 +391,6 @@ class PhonewayApp {
       this._updateAccuracyDisplay(0);
       this._setState("CAL REQUIRED");
       return;
-    }
     }
 
     this.currentG = grams;
@@ -416,8 +425,6 @@ class PhonewayApp {
       this._updateVerifyComparison();
     }
   }
-
-
 
   _updateAccuracyDisplay(confidence) {
     const evidence = this.scale.getAccuracyEvidence(confidence);
@@ -550,11 +557,13 @@ class PhonewayApp {
 
     if (this._pendingCalibration && this.currentG > 0.2) {
       this._pendingCalibration = false;
-          this._setState("READY");
 
       const result = this.scale.calibrate(this.calWeightG);
       if (result.success) {
         const points = result.calibrationPoints;
+        try {
+          telemetry.logCalibration(this.scale.sensitivity, this.scale.getSurfaceQuality(), points, 0);
+        } catch {}
         this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
         hapticFeedback([30, 50, 30]);
 
@@ -565,22 +574,25 @@ class PhonewayApp {
         }
         this._updateCalibrationGuide();
       } else {
-        this._showToast('Cal failed: ' + result.error, 4000);
+        try {
+          telemetry.logSensorError("calibration", result.error);
+        } catch {}
+        this._showToast("Cal failed: " + result.error, 4000);
       }
       return;
     }
-    }
 
     hapticFeedback([50]);
-    this._setState('ZEROING');
-    this._showToast('Taring — hold phone perfectly still...', 7000);
+    this._setState("ZEROING");
+    this._showToast("Taring — hold phone perfectly still...", 7000);
 
     await this.scale.tare();
 
-    this._setState('READY');
+    this._setState("READY");
     if (this.display) this.display.setValue(0);
-    this._showToast('Tared — scale zeroed', 3500);
+    this._showToast("Tared — scale zeroed", 3500);
   }
+
 
   _showCalModal() {
     const modal = document.getElementById('calOverlay');
@@ -749,7 +761,6 @@ class PhonewayApp {
         this._calFlowStableCount = 0;
         render(2);
         return;
-    }
       }
 
       if (this._calFlowStep === 3) {
@@ -867,60 +878,99 @@ class PhonewayApp {
 
   _selectReferenceWeight(weight, chipElement) {
     this._selectedRefWeight = weight;
-    
-    document.querySelectorAll('.verify-chip').forEach(c => c.classList.remove('selected'));
-    chipElement.classList.add('selected');
-    
-    document.getElementById('verifyStats').style.display = 'block';
-    document.getElementById('vAccBarWrap').style.display = 'block';
-    document.getElementById('verifyLockBtn').style.display = 'inline-block';
-    
-    document.getElementById('vExpected').textContent = weight.grams.toFixed(2);
-    document.getElementById('verifyTip').textContent = 'Place weight on scale...';
-    
+
+    document.querySelectorAll(".verify-chip").forEach(c => c.classList.remove("selected"));
+    chipElement.classList.add("selected");
+
+    document.getElementById("verifyStats").style.display = "block";
+    document.getElementById("vAccBarWrap").style.display = "block";
+    document.getElementById("verifyLockBtn").style.display = "inline-block";
+
+    document.getElementById("vExpected").textContent = weight.grams.toFixed(2);
+    document.getElementById("verifyTip").textContent = "Place weight on scale...";
+
     this._updateVerifyComparison();
   }
 
   _updateVerifyComparison() {
     if (!this._selectedRefWeight || !this.scale.isStable) return;
-    
+
     const result = calculateVerification(this.currentG, this._selectedRefWeight);
-    
-    document.getElementById('vMeasured').textContent = result.measured.toFixed(2);
-    document.getElementById('vError').textContent = 
-      `${result.error >= 0 ? '+' : ''}${result.error.toFixed(2)}g (${result.errorPercent.toFixed(1)}%)`;
-    
-    const passEl = document.getElementById('vPass');
-    passEl.textContent = result.isWithinTolerance ? '✓ PASS' : '✗ FAIL';
-    passEl.className = result.isWithinTolerance ? 'vstat-pass pass' : 'vstat-pass fail';
-    
-    document.getElementById('vTol').textContent = `±${result.reference.tolerance}g`;
-    
+
+    document.getElementById("vMeasured").textContent = result.measured.toFixed(2);
+    document.getElementById("vError").textContent =
+      `${result.error >= 0 ? "+" : ""}${result.error.toFixed(2)}g (${result.errorPercent.toFixed(1)}%)`;
+
+    const passEl = document.getElementById("vPass");
+    passEl.textContent = result.isWithinTolerance ? "✓ PASS" : "✗ FAIL";
+    passEl.className = result.isWithinTolerance ? "vstat-pass pass" : "vstat-pass fail";
+
+    document.getElementById("vTol").textContent = `±${result.reference.tolerance}g`;
+
     const accPct = Math.min(100, result.accuracy);
-    document.getElementById('vAccPct').textContent = accPct.toFixed(1) + '%';
-    document.getElementById('vAccFill').style.width = accPct + '%';
-    
-    document.getElementById('verifyTip').textContent = 
-      `Grade ${result.grade} — ${result.isWithinTolerance ? 'Within tolerance' : 'Outside tolerance'}`;
-    
-    // Haptic feedback for pass
+    document.getElementById("vAccPct").textContent = accPct.toFixed(1) + "%";
+    document.getElementById("vAccFill").style.width = accPct + "%";
+
+    document.getElementById("verifyTip").textContent =
+      `Grade ${result.grade} — ${result.isWithinTolerance ? "Within tolerance" : "Outside tolerance"}`;
+
     if (result.isWithinTolerance) {
       hapticFeedback([20, 10, 20]);
     }
-    const verification = this.scale.verifyAgainstKnown(this._selectedRefWeight);
-    if (!verification.valid) {
-      this._showToast(verification.error, 2500);
-      return;
-    }
-    }
+
+    try {
+      globalErrorLogger.logError({
+        expectedGrams: result.knownGrams,
+        measuredGrams: result.measuredGrams,
+        errorGrams: result.errorGrams,
+        errorPercent: result.errorPercent,
+        sensorMode: this._precisionMode ? "precision" : "standard",
+        calibrationPoints: this.scale.getCalibrationQuality().points,
+        phoneModel: getDeviceInfo().platform,
+        surfaceQuality: this.scale.getSurfaceQuality(),
+        activeSensors: [],
+        fusionConfidence: this.scale.confidence
+      });
+    } catch {}
+
+    try {
+      telemetry.logVerify(result.knownGrams, result.measuredGrams, result.errorPercent, result.isWithinTolerance ? "PASS" : "FAIL", result.passed ? "TENTH_GRAM" : "ABOVE_TENTH");
+    } catch {}
+
     this._sendTelemetry("verify", {
-      referenceGrams: verification.knownGrams,
-      errorGrams: verification.errorGrams,
-      errorPct: verification.errorPercent,
-      grade: verification.passed ? "PASS" : "FAIL",
-      accuracyGrade: verification.passed ? "TENTH_GRAM" : "ABOVE_TENTH"
+      referenceGrams: result.knownGrams,
+      errorGrams: result.errorGrams,
+      errorPct: result.errorPercent,
+      grade: result.passed ? "PASS" : "FAIL",
+      accuracyGrade: result.passed ? "TENTH_GRAM" : "ABOVE_TENTH"
     });
+
     this._updateAccuracyDisplay(this.scale.confidence);
+  }
+
+  _runScheduledHealthPass() {
+    telemetry.fetchGlobalStats().catch(() => {});
+
+    const recommendations = globalErrorLogger.getCalibrationRecommendations();
+    const summary = {
+      timestamp: Date.now(),
+      version: APP_VERSION,
+      recommendationCount: recommendations.length,
+      topRecommendations: recommendations.slice(0, 3).map(rec => ({
+        type: rec.type,
+        severity: rec.severity
+      }))
+    };
+
+    try {
+      telemetry.log("health_review", summary);
+    } catch {}
+
+    if (recommendations.length > 0) {
+      try {
+        this.storage.setObject("phoneway_last_health_review", summary);
+      } catch {}
+    }
   }
 
   _lockReference() {
