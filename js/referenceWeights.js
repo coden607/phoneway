@@ -14,8 +14,8 @@ const US_COINS = [
   { id: 'penny_modern', name: 'US Penny (1983–present)', grams: 2.5, tolerance: 0.1, icon: '🪙', category: 'coin' },
   { id: 'penny_copper', name: 'US Penny (pre-1982)', grams: 3.11, tolerance: 0.1, icon: '🪙', category: 'coin' },
   { id: 'nickel', name: 'US Nickel', grams: 5.0, tolerance: 0.1, icon: '🪙', category: 'coin', recommended: true },
-  { id: 'dime', name: 'US Dime', grams: 2.268, tolerance: 0.05, icon: '🪙', category: 'coin' },
-  { id: 'quarter', name: 'US Quarter', grams: 5.67, tolerance: 0.1, icon: '🪙', category: 'coin', recommended: true },
+  { id: 'dime', name: 'US Dime', grams: 2.268, tolerance: 0.05, icon: '🪙', category: 'coin', recommended: true },
+  { id: 'quarter', name: 'US Quarter', grams: 5.67, tolerance: 0.1, icon: '🪙', category: 'coin' },
   { id: 'half_dollar', name: 'US Half Dollar', grams: 11.34, tolerance: 0.2, icon: '🪙', category: 'coin' },
   { id: 'dollar_sacagawea', name: 'Sacagawea Dollar', grams: 8.1, tolerance: 0.15, icon: '🪙', category: 'coin' },
   { id: 'dollar_ike', name: 'Eisenhower Dollar', grams: 22.68, tolerance: 0.3, icon: '🪙', category: 'coin' },
@@ -40,7 +40,7 @@ const COMMON_ITEMS = [
   { id: 'aa_battery', name: 'AA Battery', grams: 23.0, tolerance: 0.5, icon: '🔋', category: 'battery' },
   { id: 'aaa_battery', name: 'AAA Battery', grams: 11.5, tolerance: 0.3, icon: '🔋', category: 'battery' },
   { id: 'quarter_4', name: '4 Quarters', grams: 22.68, tolerance: 0.3, icon: '🪙', category: 'coin_stack' },
-  { id: 'nickel_2', name: '2 Nickels', grams: 10.0, tolerance: 0.15, icon: '🪙', category: 'coin_stack', recommended: true },
+  { id: 'nickel_2', name: '2 Nickels', grams: 10.0, tolerance: 0.15, icon: '🪙', category: 'coin_stack' },
   { id: 'penny_10', name: '10 Pennies', grams: 25.0, tolerance: 0.5, icon: '🪙', category: 'coin_stack' },
   { id: 'quarter_nickel', name: 'Quarter + Nickel', grams: 10.67, tolerance: 0.2, icon: '🪙', category: 'coin_stack' },
   { id: 'sd_card', name: 'SD Card', grams: 2.0, tolerance: 0.1, icon: '💾', category: 'electronics' },
@@ -53,8 +53,8 @@ const COMMON_ITEMS = [
  * Standard calibration weights (if you have them)
  */
 const CALIBRATION_WEIGHTS = [
-  { id: 'cal_1g', name: 'Calibration Weight 1g', grams: 1.0, tolerance: 0.005, icon: '⚖️', category: 'calibration' },
-  { id: 'cal_2g', name: 'Calibration Weight 2g', grams: 2.0, tolerance: 0.005, icon: '⚖️', category: 'calibration' },
+  { id: 'cal_1g', name: 'Calibration Weight 1g', grams: 1.0, tolerance: 0.005, icon: '⚖️', category: 'calibration', recommended: true },
+  { id: 'cal_2g', name: 'Calibration Weight 2g', grams: 2.0, tolerance: 0.005, icon: '⚖️', category: 'calibration', recommended: true },
   { id: 'cal_5g', name: 'Calibration Weight 5g', grams: 5.0, tolerance: 0.005, icon: '⚖️', category: 'calibration', recommended: true },
   { id: 'cal_10g', name: 'Calibration Weight 10g', grams: 10.0, tolerance: 0.01, icon: '⚖️', category: 'calibration', recommended: true },
   { id: 'cal_20g', name: 'Calibration Weight 20g', grams: 20.0, tolerance: 0.01, icon: '⚖️', category: 'calibration' },
@@ -75,7 +75,24 @@ const ALL_REFERENCE_WEIGHTS = [
  * Get recommended weights for initial calibration
  */
 function getRecommendedWeights() {
-  return ALL_REFERENCE_WEIGHTS.filter(w => w.recommended);
+  const categoryPriority = {
+    calibration: 0,
+    currency: 1,
+    coin: 2,
+    coin_stack: 3
+  };
+
+  return ALL_REFERENCE_WEIGHTS
+    .filter(w => w.recommended)
+    .sort((a, b) => {
+      const categoryDiff = (categoryPriority[a.category] ?? 9) - (categoryPriority[b.category] ?? 9);
+      if (categoryDiff !== 0) return categoryDiff;
+
+      const toleranceDiff = (a.tolerance ?? Infinity) - (b.tolerance ?? Infinity);
+      if (toleranceDiff !== 0) return toleranceDiff;
+
+      return (a.grams ?? 0) - (b.grams ?? 0);
+    });
 }
 
 /**

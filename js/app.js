@@ -616,7 +616,7 @@ class PhonewayApp {
     if (!container) return;
 
     container.innerHTML = '';
-    getRecommendedWeights().slice(0, 3).forEach((weight, index) => {
+    getRecommendedWeights().slice(0, 4).forEach((weight, index) => {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'cal-choice' + (index === 0 ? ' selected' : '');
@@ -726,7 +726,7 @@ class PhonewayApp {
     
     chipsContainer.innerHTML = '';
     
-    const weights = [...US_COINS.slice(0, 4), ...CURRENCY.slice(0, 3)];
+    const weights = getRecommendedWeights().slice(0, 6);
     
     weights.forEach(w => {
       const chip = document.createElement('button');
