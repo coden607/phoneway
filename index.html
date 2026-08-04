@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover"/>
+  <meta name="mobile-web-app-capable"                content="yes"/>
+  <meta name="apple-mobile-web-app-capable"          content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title"            content="Phoneway"/>
+  <meta name="theme-color"                           content="#00d4ff"/>
+  <title>Phoneway v4.1 — Ultra-Precision Scale</title>
+  <link rel="manifest"          href="manifest.json?v=4.1.0"/>
+  <link rel="apple-touch-icon"  href="icons/icon.svg"/>
+  <link rel="stylesheet"        href="css/style.css?v=4.2.0"/>
+<style>
+/* ── Precision estimate label (under accuracy bar) ────────── */
+.prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
+  letter-spacing:1px;color:#555;margin-top:2px;transition:color .4s}
+
+/* ── Accuracy block — tappable for guide ──────────────────── */
+#accuracyBlock{cursor:pointer;-webkit-tap-highlight-color:rgba(201,162,39,.15)}
+
+/* ══ Button Tooltip Overlay ══════════════════════════════════ */
+#btnTooltip{position:fixed;inset:0;z-index:60000;display:flex;align-items:center;
+  justify-content:center;padding:18px}
+.tip-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.88);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.tip-card{position:relative;background:#1a1a1a;border:2px solid #c9a227;
+  border-radius:16px;padding:20px;max-width:360px;width:100%;
+  box-shadow:0 0 48px rgba(201,162,39,.45),0 20px 60px rgba(0,0,0,.85);
+  animation:tipIn .18s ease-out}
+@keyframes tipIn{from{opacity:0;transform:scale(.9) translateY(16px)}
+                 to  {opacity:1;transform:scale(1) translateY(0)}}
+.tip-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;
+  padding-bottom:12px;border-bottom:1px solid #2a2a2a}
+.tip-icon{font-size:30px;line-height:1;flex-shrink:0}
+.tip-title{flex:1;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;
+  color:#e8c84a;letter-spacing:2px}
+.tip-close{background:#2a2a2a;border:1px solid #444;color:#888;width:30px;height:30px;
+  border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;line-height:1}
+.tip-desc{font-size:12px;line-height:1.75;color:#ccc;margin-bottom:12px}
+.tip-tips-label{font-size:8px;letter-spacing:2px;color:#555;margin-bottom:6px}
+.tip-list{margin:0;padding-left:16px;font-size:11px;color:#aaa;line-height:1.9}
+.tip-accuracy{margin-top:12px;padding:8px 12px;background:#0a1a0a;
+  border:1px solid #1a3a1a;border-radius:6px;font-size:10px;
+  color:#39ff14;letter-spacing:1px}
+.tip-footer{margin-top:14px;text-align:center;font-size:8px;
+  letter-spacing:2px;color:#3a3a3a}
+
+/* ══ Accuracy / Setup Guide Overlay ═════════════════════════ */
+.guide-section{margin-bottom:18px}
+.guide-section-title{font-size:9px;letter-spacing:2px;color:#c9a227;
+  margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #2a2a2a}
+.guide-steps{display:flex;flex-direction:column;gap:6px}
+.guide-step{padding:8px 10px;background:#111;border-left:3px solid #7a5c00;
+  border-radius:0 4px 4px 0;font-size:11px;line-height:1.65;color:#bbb}
+.guide-step strong{color:#e8c84a}
+.guide-table{width:100%;border-collapse:collapse;font-size:11px}
+.guide-table td{padding:5px 8px;border-bottom:1px solid #1a1a1a;color:#aaa;
+  vertical-align:middle}
+.guide-grade{color:#39ff14;font-size:10px;letter-spacing:.5px;text-align:right}
+.guide-note{margin-top:8px;font-size:10px;color:#555;line-height:1.65;font-style:italic}
+.guide-issue{padding:6px 0;border-bottom:1px solid #191919;font-size:11px;
+  color:#888;line-height:1.65}
+.guide-issue strong{color:#e8c84a}
+</style>
+
+<script>
+// Version check and auto-update
+const APP_VERSION = '4.1.2';
+const storedVersion = localStorage.getItem('phoneway_version');
+if (storedVersion && storedVersion !== APP_VERSION) {
+  if ('caches' in window) {
+    caches.keys().then(keys => {
+      keys.forEach(key => caches.delete(key));
+    });
+  }
+  localStorage.setItem('phoneway_version', APP_VERSION);
+  console.log('[Phoneway] Updated to version', APP_VERSION);
+} else if (!storedVersion) {
+  localStorage.setItem('phoneway_version', APP_VERSION);
+}
+</script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCALE BODY
+════════════════════════════════════════════════════════════ -->
+<div id="app">
+
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <div id="header">
+    <div class="brand">
+      <div class="brand-name">PHONEWAY</div>
+      <div class="brand-sub">PRECISION DIGITAL SCALE · SENSOR FUSION</div>
+    </div>
+
+    <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
+    <div id="accuracyBlock">
+      <div class="acc-label">ACCURACY</div>
+      <div class="acc-display">
+        <div id="accDigits" class="acc-seg-wrap"></div>
+        <div class="acc-pct-sign">%</div>
+      </div>
+      <div class="acc-bar-wrap">
+        <div class="acc-bar-fill" id="accBar"></div>
+      </div>
+      <div id="precEst" class="prec-est">UNCAL</div>
+      <div class="header-leds" style="margin-top:4px">
+        <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
+        <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
+        <div class="led-group"><span class="led-lbl">MIC</span><div class="led led-off" id="ledAudio"></div></div>
+        <div class="led-group"><span class="led-lbl">CAM</span><div class="led led-off" id="ledCamera"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Display ────────────────────────────────────────────── -->
+  <div id="display-section">
+    <div class="display-window">
+      <div id="digitDisplay" class="seg-display"></div>
+      <div class="display-unit" id="unitLabel">g</div>
+    </div>
+
+    <!-- Stability bar -->
+    <div id="stabilityBar">
+      <div class="stability-track">
+        <div class="stability-fill" id="stabilityFill"></div>
+      </div>
+      <div class="stability-label" id="stableLabel">READY</div>
+    </div>
+
+    <!-- Reading history dots (last 5 stable readings) -->
+    <div id="readingHistory"></div>
+  </div>
+
+  <!-- ── Status Bar ─────────────────────────────────────────── -->
+  <div id="status-bar">
+    <span id="statusText">IDLE</span>
+    <span id="modeLabel">ULTRA</span>
+    <span id="precisionLabel">σ: —</span>
+    <span id="mlLabel">ML: —</span>
+    <span id="surfaceLabel">SURFACE: —</span>
+    <span id="gradeLabel">GRADE: —</span>
+  </div>
+
+  <!-- ── Calibration Guide ─────────────────────────────────── -->
+  <div id="calGuide" class="cal-guide">
+    <div class="cal-guide-header">
+      <span class="cal-icon">⚖️</span>
+      <span class="cal-title">CALIBRATION REQUIRED</span>
+    </div>
+    <div class="cal-steps">
+      <div class="cal-step" id="calStep1">
+        <span class="step-num">1</span>
+        <span class="step-text">Press CAL button to start</span>
+      </div>
+      <div class="cal-step" id="calStep2">
+        <span class="step-num">2</span>
+        <span class="step-text">Remove all weight & press TARE</span>
+      </div>
+      <div class="cal-step" id="calStep3">
+        <span class="step-num">3</span>
+        <span class="step-text">Place nickel (5g) or known weight</span>
+      </div>
+      <div class="cal-step" id="calStep4">
+        <span class="step-num">4</span>
+        <span class="step-text">Press TARE to calibrate</span>
+      </div>
+    </div>
+    <div class="cal-tip">
+      💡 Tip: Use a nickel (5g) or dollar bill (1g) for best accuracy
+    </div>
+  </div>
+
+  <!-- ── Surface / Touch Pad ────────────────────────────────── -->
+  <div id="touch-section">
+    <div id="touchPad">
+      <div class="pad-icon">⚖️</div>
+      <div class="pad-label">PLACE OBJECT ON PHONE · ALL SENSORS ACTIVE</div>
+
+      <!-- 4 sensor activity bars -->
+      <div class="sensor-bars">
+        <div class="sensor-row">
+          <span class="s-lbl">ACCEL</span>
+          <div class="sensor-track"><div class="sensor-fill" id="accelBar"></div></div>
+        </div>
+        <div class="sensor-row">
+          <span class="s-lbl">AUDIO</span>
+          <div class="sensor-track"><div class="sensor-fill" id="audioBar"></div></div>
+        </div>
+        <div class="sensor-row">
+          <span class="s-lbl">TOUCH</span>
+          <div class="sensor-track"><div class="sensor-fill" id="touchBar"></div></div>
+        </div>
+        <div class="sensor-row">
+          <span class="s-lbl">HAMR</span>
+          <div class="sensor-track"><div class="sensor-fill" id="hammerBar"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Button Panel ───────────────────────────────────────── -->
+  <div id="btn-panel">
+
+    <!-- Row 1: main functions -->
+    <div class="btn-row">
+      <button class="btn" id="btnTare" aria-label="Tare">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <path d="M18 18 L14 12 M42 15 L46 10" stroke="#1a0a00" stroke-width="1.5" opacity=".4"/>
+        </svg>
+        <div class="btn-label">TARE</div>
+      </button>
+
+      <button class="btn" id="btnMode" aria-label="Mode">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <path d="M16 22 L12 14 M44 16 L49 10" stroke="#1a0a00" stroke-width="1.5" opacity=".4"/>
+        </svg>
+        <div class="btn-label">MODE</div>
+      </button>
+
+      <button class="btn" id="btnUnits" aria-label="Units">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+        </svg>
+        <div class="btn-label">UNITS</div>
+      </button>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="btn-row-2">
+      <!-- POWER (red skull) -->
+      <button class="btn" id="btnPower" aria-label="Power">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0000" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#ff4444"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#ff4444"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0000" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <path d="M32 6 L26 18 L30 18 L28 28 L34 16 L30 16 Z" fill="#ff4444" opacity=".6"/>
+        </svg>
+        <div class="btn-label">ON/OFF</div>
+      </button>
+
+      <!-- HOLD -->
+      <button class="btn" id="btnHold" aria-label="Hold">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="24" y="8" width="5" height="14" rx="2" fill="#c9a227" opacity=".5"/>
+          <rect x="31" y="8" width="5" height="14" rx="2" fill="#c9a227" opacity=".5"/>
+        </svg>
+        <div class="btn-label">HOLD</div>
+      </button>
+
+      <!-- CAL (blue skull) -->
+      <button class="btn" id="btnCal" aria-label="Calibrate">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#00060a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#44aaff"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#44aaff"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#00060a" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <path d="M30 6 L32 13 L39 11 L35 17 L42 20 L35 23 L39 30 L32 27 L30 34 L28 27 L21 30 L25 23 L18 20 L25 17 L21 11 L28 13 Z" fill="#44aaff" opacity=".35"/>
+        </svg>
+        <div class="btn-label">CAL</div>
+      </button>
+    </div>
+
+    <!-- Bottom row (5 buttons) -->
+    <div class="btn-row-3" style="grid-template-columns: repeat(5, 1fr);">
+      <!-- VERIFY — known-weight accuracy check (green skull) -->
+      <button class="btn btn-verify" id="btnVerify" aria-label="Verify against known weight">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#001a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#39ff14"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#39ff14"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#001a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <!-- Checkmark detail -->
+          <path d="M20 25 L26 31 L38 19" stroke="#39ff14" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
+        </svg>
+        <div class="btn-label">VERIFY</div>
+      </button>
+
+      <!-- HAMMER — vibration exciter -->
+      <button class="btn btn-hammer" id="btnHammer" aria-label="Vibration hammer measure">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#0a0600" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#ff8c00"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#ff8c00"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#0a0600" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <!-- Vibration waves -->
+          <path d="M8 26 Q4 22 8 18 Q12 14 8 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+          <path d="M52 26 Q56 22 52 18 Q48 14 52 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+        </svg>
+        <div class="btn-label">HAMMER</div>
+      </button>
+
+      <!-- PRECISION — high accuracy measurement -->
+      <button class="btn btn-precision" id="btnPrecision" aria-label="High precision measure" title="High Precision Mode">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#001a0a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#00ff66"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#00ff66"/>
+          <!-- Target crosshairs -->
+          <circle cx="30" cy="24" r="10" stroke="#00ff66" stroke-width="1.5" fill="none" opacity=".7"/>
+          <circle cx="30" cy="24" r="4" stroke="#00ff66" stroke-width="1" fill="none" opacity=".7"/>
+          <path d="M30 10 L30 14 M30 34 L30 38 M16 24 L20 24 M40 24 L44 24" stroke="#00ff66" stroke-width="1.5" opacity=".7"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+        </svg>
+        <div class="btn-label">0.1g</div>
+      </button>
+
+      <button class="btn btn-sm-light" id="btnLight" aria-label="Backlight">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#000616" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#44aaff"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#44aaff"/>
+          <path d="M30 4 L30 10 M46 12 L42 16 M52 28 L46 28 M46 44 L42 40 M30 52 L30 46 M14 44 L18 40 M8 28 L14 28 M14 12 L18 16"
+                stroke="#44aaff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+        </svg>
+        <div class="btn-label">LIGHT</div>
+      </button>
+
+      <!-- STATS button -->
+      <button class="btn btn-stats" id="btnStats" aria-label="Accuracy Report" title="View Accuracy Report">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#0a1a0a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#e8c84a"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#e8c84a"/>
+          <!-- Chart bars -->
+          <rect x="18" y="32" width="4" height="8" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="24" y="28" width="4" height="12" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="30" y="24" width="4" height="16" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="36" y="30" width="4" height="10" rx="1" fill="#e8c84a" opacity=".8"/>
+        </svg>
+        <div class="btn-label">STATS</div>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── Footer ─────────────────────────────────────────────── -->
+  <div id="footer">
+    <div class="footer-stack">
+      <div class="footer-text">PHONEWAY v4.1 · 15-SENSOR ULTRA · NN-ENHANCED · 0.1g TARGET</div>
+      <div class="footer-credit">CREATED BY <span class="credit-name">STEVE B</span> AKA <span class="credit-handle">CODEN809</span></div>
+    </div>
+    <div class="footer-gems">
+      <div class="gem gem-gold"></div>
+      <div class="gem gem-ruby"></div>
+      <div class="gem gem-teal"></div>
+      <div class="gem gem-gold"></div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ONBOARDING MODAL
+════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="onboardModal">
+  <div class="modal-card">
+    <div class="modal-title">PRECISION SETUP</div>
+    <div class="modal-sub">REFERENCE-WEIGHT CALIBRATION · REQUIRED FOR ACCURACY</div>
+
+    <div class="cal-tip-box">
+      <p class="tip-headline">🎯 For 0.1 g accuracy — grab one of these:</p>
+      <div class="tip-coins">
+        <div class="tip-coin">💵<br><strong>1.0 g</strong><br><small>Dollar bill</small></div>
+        <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny</small></div>
+        <div class="tip-coin">🪙<br><strong>5.0 g</strong><br><small>Nickel ★</small></div>
+        <div class="tip-coin">🪙<br><strong>5.67 g</strong><br><small>Quarter</small></div>
+      </div>
+      <p class="tip-note">
+        ⚡ Best accuracy: use a <strong>nickel (5g)</strong> + a <strong>dollar bill (1g)</strong>
+        for a 2-point calibration. Then keep them as your reference weights.
+      </p>
+    </div>
+
+    <p class="modal-instr">Select the exact reference you will place on the phone:</p>
+    <div class="cal-weight-list"></div>
+
+    <div class="custom-weight-row">
+      <label for="customWeightInput">GRAMS:</label>
+      <input type="number" id="customWeightInput" min="0.1" max="500" step="0.01"
+             placeholder="0.00" inputmode="decimal"/>
+    </div>
+
+    <div class="surface-tip">
+      <strong>📱 Surface tip:</strong> Place phone on a mouse-pad, notebook, or folded
+      cloth — never on a hard table. The soft surface is what the sensor detects deflecting.
+    </div>
+
+    <div class="cal-progress-wrap"><div id="calProgress"></div></div>
+
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
+      <button class="modal-btn modal-btn-secondary" id="skipCalBtn">SKIP (ROUGH MODE)</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STEP-BY-STEP CALIBRATION OVERLAY
+════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="stepOverlay" style="display:none">
+  <div class="modal-card step-card">
+    <div class="step-title modal-title">CALIBRATING…</div>
+    <pre class="step-body"></pre>
+    <div class="cal-progress-wrap" style="margin-top:16px">
+      <div id="calStepProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px;width:0%"></div>
+    </div>
+    <div id="calSensorStatus" style="font-size:8px;letter-spacing:2px;color:#555;margin-top:8px;text-align:center"></div>
+    <button id="calReadyBtn" class="modal-btn btn-ready"
+            style="display:none;margin-top:14px;width:100%">
+      ✓ I'M READY
+    </button>
+    <button id="calSkipBtn" class="modal-btn modal-btn-secondary"
+            style="display:none;margin-top:8px;width:100%;font-size:8px">
+      SKIP THIS STEP →
+    </button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     RE-CALIBRATE OVERLAY
+════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="calOverlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-title">PRECISION CALIBRATION</div>
+    <div class="modal-sub">SELECT A REFERENCE WEIGHT</div>
+    <p style="font-size:9px;line-height:1.8;color:#888;letter-spacing:1px;margin-bottom:16px">
+      Two-point calibration using everyday objects gives you ±0.1–0.5 g accuracy.
+      A nickel (5.0 g) + dollar bill (1.0 g) is the recommended combination.
+    </p>
+    <div id="recalWeightList" class="recal-weight-list"></div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-primary" id="calConfirmBtn">PROCEED</button>
+      <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>
+    </div>
+
+    <!-- Factory reset section -->
+    <div style="margin-top:14px;text-align:center;border-top:1px solid #1e1e1e;padding-top:12px">
+      <button id="calResetBtn" class="modal-btn-link">⚠ FACTORY RESET</button>
+    </div>
+    <div id="calResetConfirm" style="display:none;margin-top:10px">
+      <p style="font-size:8px;color:#ff4444;letter-spacing:1px;line-height:1.8;margin-bottom:10px">
+        This will erase ALL calibration data, readings and ML history.<br>Cannot be undone.
+      </p>
+      <div style="display:flex;gap:8px">
+        <button id="calResetYesBtn" class="modal-btn" style="background:#500;color:#f88;border:1px solid #800;flex:1;font-size:8px">YES, RESET ALL</button>
+        <button id="calResetNoBtn"  class="modal-btn modal-btn-secondary" style="flex:1;font-size:8px">CANCEL</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     REFERENCE WEIGHT VERIFY PANEL (slide-up drawer)
+════════════════════════════════════════════════════════════ -->
+<div id="verifyPanel" class="verify-panel" style="display:none">
+
+  <!-- Header -->
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">VERIFY ACCURACY</div>
+      <div class="verify-sub">MEASURE AGAINST KNOWN WEIGHT</div>
+    </div>
+    <button class="verify-close" id="verifyClose">×</button>
+  </div>
+
+  <!-- Reference weight chips — built by JS -->
+  <div class="verify-chips" id="verifyChips"></div>
+
+  <!-- Live comparison readout -->
+  <div class="verify-readout">
+    <div class="verify-tip" id="verifyTip">← SELECT A REFERENCE WEIGHT ABOVE</div>
+
+    <div class="verify-stats" id="verifyStats" style="display:none">
+      <div class="vstat-row">
+        <span class="vstat-label">EXPECTED</span>
+        <span class="vstat-value" id="vExpected">—</span>
+        <span class="vstat-unit">g</span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">MEASURED</span>
+        <span class="vstat-value" id="vMeasured">—</span>
+        <span class="vstat-unit">g</span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">ERROR</span>
+        <span class="vstat-value vstat-small" id="vError">—</span>
+        <span class="vstat-unit" id="vTol"></span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">RESULT</span>
+        <span class="vstat-pass" id="vPass">···</span>
+      </div>
+    </div>
+
+    <!-- Match accuracy bar -->
+    <div class="verify-acc-bar-wrap" id="vAccBarWrap" style="display:none">
+      <div class="verify-acc-label">
+        <span>MATCH ACCURACY</span>
+        <span id="vAccPct">—%</span>
+      </div>
+      <div class="verify-acc-track">
+        <div class="verify-acc-fill" id="vAccFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-primary" id="verifyLockBtn" style="display:none">⭐ LOCK AS REF</button>
+    <button class="modal-btn modal-btn-secondary" id="verifyCloseBtn">CLOSE</button>
+  </div>
+
+</div>
+
+
+<!-- ── PWA Install Banner (All Platforms) ───────────────── -->
+<div id="installBanner">
+  <div class="install-icon">⚖️</div>
+  <div class="install-text">
+    <div class="install-title">📲 INSTALL PHONEWAY</div>
+    <div class="install-sub" id="installSubText">One-click install — Desktop icon — Works offline</div>
+    <div class="install-features">
+      <span>✓ 0.1g Precision</span>
+      <span>✓ No App Store</span>
+      <span>✓ Always Available</span>
+    </div>
+  </div>
+  <div class="install-actions">
+    <button id="installBtn" class="install-button">INSTALL NOW</button>
+    <button id="installDismiss" class="install-x">×</button>
+  </div>
+</div>
+
+<!-- ── Desktop Install Modal ─────────────────────────────── -->
+<div id="desktopInstallModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:10000; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:#161616; border:2px solid var(--gold); border-radius:16px; padding:32px; max-width:420px; text-align:center; box-shadow:0 0 60px rgba(201,162,39,0.3);">
+    <div style="font-size:48px; margin-bottom:16px;">💻</div>
+    <div style="font-size:18px; font-weight:bold; color:var(--gold); letter-spacing:2px; margin-bottom:8px;">INSTALL ON DESKTOP</div>
+    <div style="font-size:12px; color:#888; line-height:1.6; margin-bottom:20px;">
+      Install Phoneway as a desktop app for one-click access.<br>
+      No browser tabs needed — launches like any app!
+    </div>
+    <div style="background:#0a0a0a; border-radius:8px; padding:16px; margin-bottom:20px; text-align:left;">
+      <div style="font-size:11px; color:#666; margin-bottom:12px; letter-spacing:1px;">INSTALL STEPS:</div>
+      <ol style="font-size:12px; color:#ccc; line-height:2; margin:0; padding-left:20px;">
+        <li>Click <strong style="color:var(--gold);">INSTALL NOW</strong> below</li>
+        <li>Click <strong style="color:var(--gold);">Install</strong> in the browser prompt</li>
+        <li>Find <strong style="color:var(--gold);">Phoneway</strong> on your desktop!</li>
+      </ol>
+    </div>
+    <div style="display:flex; gap:12px;">
+      <button id="desktopInstallBtn" style="flex:1; background:linear-gradient(135deg, #9a7000, #e8c84a); color:#000; border:none; padding:14px; border-radius:8px; font-weight:bold; cursor:pointer;">INSTALL NOW</button>
+      <button id="desktopInstallCancel" style="background:#333; color:#999; border:none; padding:14px 24px; border-radius:8px; cursor:pointer;">Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── iOS Safari Install Hint ───────────────────────────── -->
+<div id="iosHint">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span>📲</span>
+    <div>
+      <strong style="color:var(--gold);">INSTALL PHONEWAY</strong><br>
+      <small>Tap <strong>Share ⬆</strong> then <strong>Add to Home Screen</strong></small>
+    </div>
+  </div>
+  <button onclick="this.parentElement.style.display='none'" class="ios-close">×</button>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ACCURACY REPORT PANEL
+════════════════════════════════════════════════════════════ -->
+<div id="accuracyPanel" class="verify-panel" style="display:none; max-height: 80vh; overflow-y: auto;">
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">ACCURACY REPORT</div>
+      <div class="verify-sub">ML-ENHANCED CALIBRATION STATUS</div>
+    </div>
+    <button class="verify-close" id="accuracyClose">×</button>
+  </div>
+  
+  <div style="padding: 16px; font-size: 11px; line-height: 1.6;">
+    <!-- Grade Display -->
+    <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #1a1a1a, #0a0a0a); border-radius: 8px; border: 1px solid #333;">
+      <div style="font-size: 10px; color: #888; letter-spacing: 2px; margin-bottom: 8px;">CURRENT GRADE</div>
+      <div id="accGradeDisplay" style="font-size: 48px; font-weight: bold; color: var(--seg-on); text-shadow: 0 0 20px rgba(232,200,74,0.5);">—</div>
+      <div id="accGradeDesc" style="font-size: 12px; color: #aaa; margin-top: 4px;">Calibrate to achieve accuracy</div>
+    </div>
+    
+    <!-- Stats Grid -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">PRECISION</div>
+        <div id="accPrecision" style="color: #e8c84a; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">SYSTEMATIC ERROR</div>
+        <div id="accSystematic" style="color: #e8c84a; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">ML SAMPLES</div>
+        <div id="accMLSamples" style="color: #39ff14; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">VERIFICATIONS</div>
+        <div id="accVerifications" style="color: #44aaff; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+    </div>
+    
+    <!-- Recommendations -->
+    <div id="accRecommendations" style="background: #0a1a0a; border: 1px solid #1a3a1a; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+      <div style="color: #39ff14; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">RECOMMENDATIONS</div>
+      <div id="accRecList" style="color: #aaa;">Complete calibration to receive recommendations</div>
+    </div>
+    
+    <!-- Community Stats -->
+    <div style="background: #0a0f1a; border: 1px solid #1a2a3a; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+      <div style="color: #44aaff; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">🌐 COMMUNITY ACCURACY</div>
+      <div id="accCommunity" style="color:#555;font-size:11px">Loading…</div>
+    </div>
+
+    <!-- Environmental Status -->
+    <div style="background: #1a1a1a; border-radius: 6px; padding: 12px;">
+      <div style="color: #666; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">ENVIRONMENTAL STATUS</div>
+      <div id="accEnvStatus" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px;">
+        <div>Barometer: <span id="envBaro">—</span></div>
+        <div>Battery: <span id="envBatt">—</span></div>
+        <div>Orientation: <span id="envOrient">—</span></div>
+        <div>Thermal: <span id="envThermal">—</span></div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-primary" id="accExportBtn">📊 EXPORT DATA</button>
+    <button class="modal-btn modal-btn-secondary" id="accCloseBtn">CLOSE</button>
+  </div>
+</div>
+
+<!-- ── Pre-module error trap (catches ES module load failures) ── -->
+<script>
+(function() {
+  // ── Auto-report: send error to server immediately, no module needed ──
+  function _report(msg, src, line, col) {
+    try {
+      var ua  = navigator.userAgent;
+      var dc  = /Android/i.test(ua) ? 'android' : /iPhone|iPad|iPod/i.test(ua) ? 'ios' : 'desktop';
+      var clean = {
+        msg:  String(msg || '').slice(0, 150).replace(/https?:\/\/\S+/g, '[url]'),
+        src:  String(src || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
+        line: Number(line) || 0,
+        col:  Number(col)  || 0,
+        v:    '3.7'
+      };
+      fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceClass: dc, events: [{ type: 'js_error', data: clean, timestamp: Date.now() }] }),
+        keepalive: true
+      }).catch(function(){});
+    } catch(e) {}
+  }
+
+  // ── Visible overlay so you can see errors directly on the phone ──
+  function showErr(msg, src, line) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;background:#1a0000;z-index:99999;padding:20px;overflow:auto;font-family:monospace;font-size:13px;color:#ff6666;';
+    d.innerHTML = '<b style="font-size:16px">❌ LOAD ERROR</b><br><br>'
+      + '<b>Message:</b><br>' + String(msg) + '<br><br>'
+      + '<b>File:</b> ' + (src || '') + (line ? ':' + line : '') + '<br><br>'
+      + '<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + String(msg).replace(/'/g,"\\'") + '\').then(function(){alert(\'Copied!\')})" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;margin-right:8px">📋 COPY</button>'
+      + '<button onclick="localStorage.clear();location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer">🔄 RESET</button>';
+    document.body.appendChild(d);
+  }
+
+  window.onerror = function(msg, src, line, col, err) {
+    _report(msg, src, line, col);
+    showErr((err && err.stack) ? err.stack : msg, src, line);
+    return true;
+  };
+  window.onunhandledrejection = function(e) {
+    var r = e.reason;
+    var m = (r && r.message) ? r.message : String(r);
+    var s = (r && r.fileName)  ? r.fileName  : '';
+    var l = (r && r.lineNumber) ? r.lineNumber : 0;
+    _report(m, s, l, 0);
+    showErr((r && r.stack) ? r.stack : m, s, l);
+    return true;
+  };
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     BUTTON TOOLTIP OVERLAY (long-press any button for help)
+═══════════════════════════════════════════════════════════ -->
+<div id="btnTooltip" style="display:none">
+  <div class="tip-backdrop"></div>
+  <div class="tip-card">
+    <div class="tip-header">
+      <span id="tipIcon"  class="tip-icon">⚙️</span>
+      <span id="tipTitle" class="tip-title">BUTTON HELP</span>
+      <button id="tipClose" class="tip-close">×</button>
+    </div>
+    <p id="tipDesc" class="tip-desc"></p>
+    <div class="tip-tips-label">TIPS:</div>
+    <ul id="tipList" class="tip-list"></ul>
+    <div id="tipAccuracy" class="tip-accuracy" style="display:none"></div>
+    <div class="tip-footer">HOLD ANY BUTTON 0.5s FOR HELP · TAP TO DISMISS</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ACCURACY / SETUP GUIDE OVERLAY
+     Opened by tapping the ACCURACY block in the header.
+═══════════════════════════════════════════════════════════ -->
+<div id="guideOverlay" class="verify-panel" style="display:none; max-height:88vh; overflow-y:auto">
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">MAXIMIZE ACCURACY</div>
+      <div class="verify-sub">SETUP GUIDE · TIPS · REFERENCE WEIGHTS</div>
+    </div>
+    <button class="verify-close" id="guideClose">×</button>
+  </div>
+
+  <div style="padding:16px;font-size:11px;line-height:1.7;color:#ccc">
+
+    <!-- Quick setup checklist -->
+    <div class="guide-section">
+      <div class="guide-section-title">QUICK SETUP FOR ±0.1g</div>
+      <div class="guide-steps">
+        <div class="guide-step"><strong>1.</strong> Place phone on a <strong>soft surface</strong> — mouse pad, folded cloth, or thick notebook. <strong>NOT</strong> a hard table.</div>
+        <div class="guide-step"><strong>2.</strong> Phone <strong>face-up, flat, not tilted</strong>. Even 5° of tilt reduces accuracy.</div>
+        <div class="guide-step"><strong>3.</strong> <strong>Not charging</strong> during use. Charging cable adds vibration and thermal drift.</div>
+        <div class="guide-step"><strong>4.</strong> Wait <strong>5 minutes after charging</strong> before measuring — let phone cool to ambient temperature.</div>
+        <div class="guide-step"><strong>5.</strong> Press <strong>CAL</strong> → use a nickel (5.000g) as primary weight, dollar bill (1.00g) as 2nd point.</div>
+        <div class="guide-step"><strong>6.</strong> Press <strong>VERIFY</strong> after each calibration — this trains the accuracy engine over time.</div>
+      </div>
+    </div>
+
+    <!-- Surface quality -->
+    <div class="guide-section">
+      <div class="guide-section-title">SURFACE QUALITY — BIGGEST FACTOR</div>
+      <table class="guide-table">
+        <tr><td>★★★★</td><td>Foam mouse pad, 5+ layers cloth</td>     <td class="guide-grade" style="color:#00ff66">Excellent</td></tr>
+        <tr><td>★★★☆</td><td>Thick notebook, paperback book</td>       <td class="guide-grade">Good</td></tr>
+        <tr><td>★★☆☆</td><td>Magazine, thin paperback</td>              <td class="guide-grade" style="color:#ffcc00">OK</td></tr>
+        <tr><td>★☆☆☆</td><td>Hard desk, countertop, glass</td>         <td class="guide-grade" style="color:#ff6b00">Poor</td></tr>
+      </table>
+      <div class="guide-note">Physics: the soft surface acts as a spring. Weight compresses it → phone tilts slightly → accelerometer detects the tilt change. Softer surface = more deflection = stronger signal = better accuracy.</div>
+    </div>
+
+    <!-- Reference weights -->
+    <div class="guide-section">
+      <div class="guide-section-title">US REFERENCE WEIGHTS</div>
+      <table class="guide-table">
+        <tr><td>💵 Dollar bill</td>  <td>1.000g ±0.030g</td><td class="guide-grade">Good 2nd point</td></tr>
+        <tr><td>🪙 Penny post-1982</td><td>2.500g ±0.013g</td><td class="guide-grade">Good</td></tr>
+        <tr><td>🪙 Nickel ★</td>     <td>5.000g ±0.008g</td><td class="guide-grade" style="color:#00ff66">Best primary</td></tr>
+        <tr><td>🪙 Dime</td>         <td>2.268g ±0.010g</td><td class="guide-grade">Good</td></tr>
+        <tr><td>🪙 Quarter</td>      <td>5.670g ±0.013g</td><td class="guide-grade">Good</td></tr>
+      </table>
+    </div>
+
+    <!-- Accuracy grades -->
+    <div class="guide-section">
+      <div class="guide-section-title">ACCURACY GRADES & PRECISION ESTIMATES</div>
+      <table class="guide-table">
+        <tr><td style="color:#00ff66;font-weight:bold">A+</td><td>±0.1g</td><td>Lab quality — 3+ cal points, excellent surface</td></tr>
+        <tr><td style="color:#39ff14;font-weight:bold">A</td> <td>±0.2g</td><td>Target — 2 cal points, good surface</td></tr>
+        <tr><td style="color:#e8c84a;font-weight:bold">B</td> <td>±0.3g</td><td>Very good — 1 cal point, good surface</td></tr>
+        <tr><td style="color:#ffcc00;font-weight:bold">C</td> <td>±0.5g</td><td>Good — add more calibration points</td></tr>
+        <tr><td style="color:#ff8c00;font-weight:bold">D</td> <td>±1g</td>  <td>Recalibrate on a softer surface</td></tr>
+        <tr><td style="color:#555">UNCAL</td>                 <td>±2g+</td> <td>No calibration — results unreliable</td></tr>
+      </table>
+    </div>
+
+    <!-- Accuracy %% explanation -->
+    <div class="guide-section">
+      <div class="guide-section-title">WHAT THE ACCURACY % MEANS</div>
+      <div style="background:#111;padding:10px;border-radius:6px;line-height:1.8">
+        The <strong style="color:#e8c84a">%</strong> is a real-time <strong style="color:#e8c84a">signal quality score</strong> — it rises when you are calibrated and the phone is perfectly still, and drops when the phone moves or is uncalibrated.<br><br>
+        The <strong style="color:#39ff14">~±Xg</strong> label under the bar is the <strong style="color:#39ff14">precision estimate</strong> — the realistic gram-accuracy you can expect based on your calibration quality and surface. This is the number that really matters.
+      </div>
+    </div>
+
+    <!-- Common issues -->
+    <div class="guide-section">
+      <div class="guide-section-title">TROUBLESHOOTING</div>
+      <div class="guide-issue"><strong>Display drifts with nothing on it:</strong> Thermal drift from charging. Unplug and wait 5 min, then re-TARE.</div>
+      <div class="guide-issue"><strong>Won't read below 1g:</strong> Surface too hard. Switch to a mouse pad or folded cloth.</div>
+      <div class="guide-issue"><strong>Accuracy worse than ±0.5g after cal:</strong> Add a second calibration point (use CAL again with a different weight).</div>
+      <div class="guide-issue"><strong>No sensor reading / always 0:</strong> Motion permission denied — check browser/site settings and reload.</div>
+      <div class="guide-issue"><strong>Noisy / jumping display:</strong> External vibration (fan, traffic). Move to a still location or use 0.1g PRECISION mode.</div>
+      <div class="guide-issue"><strong>iOS — no permission prompt:</strong> Open in Safari (not in-app browser). Tap Share → Add to Home Screen.</div>
+    </div>
+
+    <div style="text-align:center;color:#333;font-size:9px;margin-top:8px;letter-spacing:1px">
+      TAP THE ACCURACY DISPLAY IN THE HEADER TO REOPEN THIS GUIDE
+    </div>
+  </div>
+
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-secondary" id="guideCloseBtn">GOT IT</button>
+  </div>
+</div>
+
+
+<!-- ── Tooltip + Guide JS ────────────────────────────────── -->
+<script>
+(function() {
+'use strict';
+
+/* ── Button help data ──────────────────────────────────── */
+var BTN_HELP = {
+  btnTare: {
+    icon:'⚖️', title:'TARE / ZERO',
+    desc:'Sets the zero point. Press with NOTHING on the phone so the display reads 0g. During calibration: place your known weight FIRST, then press TARE to register that weight.',
+    tips:['Hold phone perfectly still for ~2 s after pressing','CAL MODE: place known weight → press TARE','Re-tare if display drifts upward on an empty scale','The scale takes 100 sensor samples for its baseline — wait 2s'],
+    accuracy:'Critical — quality tare = accurate zero baseline'
+  },
+  btnMode: {
+    icon:'🔄', title:'MEASUREMENT MODE',
+    desc:'Cycles through modes: ACCEL (real-time accelerometer), PRECISION (5-second statistical average), STATISTICS (detailed readout).',
+    tips:['ACCEL — fastest, good for most weights','PRECISION — averages 5 s, most accurate single reading','STATISTICS — shows standard deviation σ and min/max'],
+    accuracy:'PRECISION mode is best for a single critical reading'
+  },
+  btnUnits: {
+    icon:'📏', title:'UNITS',
+    desc:'Switches the display between grams (g) and ounces (oz). Calibration is stored in grams internally.',
+    tips:['g = grams (default)','oz = ounces  (1 oz = 28.35 g)'],
+    accuracy:null
+  },
+  btnPower: {
+    icon:'⚡', title:'POWER ON / OFF',
+    desc:'Turns the scale on and off. When powered on the scale auto-tares. Powering off and on resets the baseline — useful if the display has drifted.',
+    tips:['Power off when not in use to conserve battery','If display drifts significantly, power-cycle to re-tare','Thermal stability is best in the first few minutes after power-on'],
+    accuracy:null
+  },
+  btnHold: {
+    icon:'⏸', title:'HOLD / FREEZE DISPLAY',
+    desc:'Freezes the current reading on screen so you can remove the object and read the weight at your leisure.',
+    tips:['Wait for STABLE (STB LED green) before pressing HOLD','Press HOLD again to release the frozen reading','Combine with PRECISION mode for most accurate frozen result'],
+    accuracy:'Always wait for STABLE indicator before freezing'
+  },
+  btnCal: {
+    icon:'🎯', title:'CALIBRATE',
+    desc:'Opens the calibration wizard. A known-weight object teaches the scale how your specific phone and surface deflect. This is the single most important step for accuracy.',
+    tips:[
+      'Best combo: nickel (5.000g) + dollar bill (1.00g) for 2-point cal',
+      'Phone on mouse pad or 5+ layers of cloth — NOT hard table',
+      'Wait 5 min after unplugging charger before calibrating',
+      'Each additional cal point improves the curve fit',
+      'Recalibrate if you change surfaces or move to a new location'
+    ],
+    accuracy:'MOST IMPORTANT STEP — wrong cal = wrong readings no matter what'
+  },
+  btnVerify: {
+    icon:'✓', title:'VERIFY ACCURACY',
+    desc:'Measures a known reference weight and shows you the exact error in grams and percent. Also trains the internal accuracy engine.',
+    tips:['Nickel: 5.000g ±0.008g — best verifier','Penny: 2.500g ±0.013g','Quarter: 5.670g ±0.013g','Dollar bill: 1.00g ±0.03g','Do 3+ verifications to unlock maximum accuracy'],
+    accuracy:'Run after every recalibration to track real-world accuracy'
+  },
+  btnHammer: {
+    icon:'🔨', title:'VIBRATION ANALYSIS',
+    desc:'Triggers vibration-based resonance measurement. The phone vibrates and analyzes how the added weight shifts its resonant frequency — a physics-based cross-check of the accelerometer reading.',
+    tips:['Works best on a harder, flatter surface (opposite of accelerometer)','Use as a cross-check when accelerometer reading seems off','Requires vibration/haptics enabled on your device'],
+    accuracy:'Secondary sensor — cross-checks the primary accelerometer'
+  },
+  btnPrecision: {
+    icon:'🎯', title:'0.1g PRECISION MODE',
+    desc:'Takes a 5-second statistical measurement: collects many readings, rejects outliers, and returns the trimmed mean with a standard deviation σ. Best possible single-shot result.',
+    tips:[
+      'Keep phone COMPLETELY still for the full 5 seconds',
+      'Only meaningful after full calibration',
+      'The σ value in the result shows how stable your surface is',
+      'Place phone on dense foam for lowest σ'
+    ],
+    accuracy:'Highest accuracy mode — use for critical measurements'
+  },
+  btnLight: {
+    icon:'💡', title:'BACKLIGHT',
+    desc:'Toggles high-contrast display mode for low-light conditions.',
+    tips:['No effect on measurement accuracy'],
+    accuracy:null
+  },
+  btnStats: {
+    icon:'📊', title:'ACCURACY REPORT',
+    desc:'Full calibration audit: grade, precision estimate, systematic error, verification history, environmental status, and specific improvement recommendations.',
+    tips:[
+      'Grade A+ = ±0.1g · A = ±0.2g · B = ±0.3g · C = ±0.5g · D = ±1g',
+      'Check RECOMMENDATIONS section for actionable tips',
+      'Export saves full calibration data as JSON for debugging',
+      'Tap the ACCURACY display in the header for the full setup guide'
+    ],
+    accuracy:'Check after every recalibration'
+  }
+};
+
+/* ── Show / hide tooltip ───────────────────────────────── */
+function showTip(id) {
+  var d = BTN_HELP[id];
+  if (!d) return;
+  document.getElementById('tipIcon').textContent  = d.icon;
+  document.getElementById('tipTitle').textContent = d.title;
+  document.getElementById('tipDesc').textContent  = d.desc;
+  var ul = document.getElementById('tipList');
+  ul.innerHTML = (d.tips||[]).map(function(t){ return '<li>'+t+'</li>'; }).join('');
+  var ae = document.getElementById('tipAccuracy');
+  if (d.accuracy) { ae.textContent = '⚡ '+d.accuracy; ae.style.display='block'; }
+  else            { ae.style.display='none'; }
+  document.getElementById('btnTooltip').style.display = 'flex';
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+function hideTip() {
+  document.getElementById('btnTooltip').style.display = 'none';
+}
+window._showBtnTip = showTip;
+window._hideBtnTip = hideTip;
+
+/* ── Attach long-press to every button that has help data ─ */
+var tipTimer = null;
+Object.keys(BTN_HELP).forEach(function(id) {
+  var btn = document.getElementById(id);
+  if (!btn) return;
+
+  function arm() {
+    if (tipTimer) clearTimeout(tipTimer);
+    tipTimer = setTimeout(function(){ tipTimer=null; showTip(id); }, 500);
+  }
+  function disarm() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer=null; }
+  }
+
+  btn.addEventListener('touchstart',  arm,    { passive:true });
+  btn.addEventListener('touchend',    disarm, { passive:true });
+  btn.addEventListener('touchmove',   disarm, { passive:true });
+  btn.addEventListener('touchcancel', disarm, { passive:true });
+  btn.addEventListener('mousedown',   arm);
+  btn.addEventListener('mouseup',     disarm);
+  btn.addEventListener('mouseleave',  disarm);
+});
+
+/* ── Close tooltip ─────────────────────────────────────── */
+document.getElementById('btnTooltip').addEventListener('click', hideTip);
+var tc = document.getElementById('tipClose');
+if (tc) tc.addEventListener('click', function(e){ e.stopPropagation(); hideTip(); });
+
+/* ── Accuracy block → open guide ──────────────────────── */
+function openGuide() {
+  var g = document.getElementById('guideOverlay');
+  if (!g) return;
+  g.style.display = 'block';
+  setTimeout(function(){ g.classList.add('show'); }, 10);
+}
+function closeGuide() {
+  var g = document.getElementById('guideOverlay');
+  if (!g) return;
+  g.classList.remove('show');
+  setTimeout(function(){ g.style.display='none'; }, 300);
+}
+
+var ab = document.getElementById('accuracyBlock');
+if (ab) ab.addEventListener('click', openGuide);
+
+var gc  = document.getElementById('guideClose');
+var gcb = document.getElementById('guideCloseBtn');
+if (gc)  gc.addEventListener('click',  closeGuide);
+if (gcb) gcb.addEventListener('click', closeGuide);
+
+})();
+</script>
+
+<!-- ── Scripts ───────────────────────────────────────────── -->
+<script type="module" src="js/app.js?v=4.2.0"></script>
+
+<!-- Service Worker Registration -->
+<script>
+(function() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js?v=4.2.0')
+        .then(function(registration) {
+          console.log('[SW] Registered:', registration.scope);
+          
+          // Check for updates
+          registration.addEventListener('updatefound', function() {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[SW] New version available');
+                // Show update notification
+                if (confirm('New version available! Reload to update?')) {
+                  window.location.reload();
+                }
+              }
+            });
+          });
+        })
+        .catch(function(error) {
+          console.log('[SW] Registration failed:', error);
+        });
+    });
+  }
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   PWA INSTALL — One-Click Desktop & Mobile Installation
+═══════════════════════════════════════════════════════════════ */
+let _dip = null;
+let _isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+// Detect platform and update install text
+const _platform = (() => {
+  if (/Windows/i.test(navigator.userAgent)) return 'windows';
+  if (/Mac/i.test(navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent)) return 'mac';
+  if (/Linux/i.test(navigator.userAgent)) return 'linux';
+  if (/Android/i.test(navigator.userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'ios';
+  return 'desktop';
+})();
+
+// Update install subtitle based on platform
+const _installSub = document.getElementById('installSubText');
+if (_installSub) {
+  const _platformText = {
+    windows: 'Install on Windows — Desktop shortcut — Works offline',
+    mac: 'Install on Mac — Dock icon — Works offline',
+    linux: 'Install on Linux — Desktop entry — Works offline',
+    android: 'Add to home screen — Works offline — No app store',
+    ios: 'Add to home screen — Works offline — No app store',
+    desktop: 'One-click install — Desktop icon — Works offline'
+  };
+  _installSub.textContent = _platformText[_platform] || _platformText.desktop;
+}
+
+// Handle install prompt
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _dip = e;
+  
+  // Show desktop modal for desktop users, banner for mobile
+  if (_isDesktop && _platform !== 'android') {
+    setTimeout(() => {
+      const modal = document.getElementById('desktopInstallModal');
+      if (modal) modal.style.display = 'flex';
+    }, 1500);
+  } else {
+    const b = document.getElementById('installBanner');
+    if (b) b.classList.add('show');
+  }
+
+  // Auto-show install banner/modal but DON'T auto-prompt (requires user gesture)
+  const shown = sessionStorage.getItem('installPromptShown');
+  if (!shown) {
+    sessionStorage.setItem('installPromptShown', '1');
+    if (_isDesktop) {
+      // Desktop: show modal after delay
+      setTimeout(() => {
+        if (!sessionStorage.getItem('installPromptAutoShown')) {
+          sessionStorage.setItem('installPromptAutoShown', '1');
+          const modal = document.getElementById('desktopInstallModal');
+          if (modal) modal.style.display = 'flex';
+        }
+      }, 8000);
+    }
+    // Mobile: banner shows automatically, user must click install
+  }
+});
+
+// Mobile banner install button - MUST be user gesture
+const installBtn = document.getElementById('installBtn');
+if (installBtn) installBtn.addEventListener('click', async () => {
+  if (!_dip) {
+    _showManualInstallInstructions();
+    return;
+  }
+  try {
+    _dip.prompt();
+    const { outcome } = await _dip.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('installBanner').classList.remove('show');
+      if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
+      _showInstallSuccess();
+    }
+    _dip = null;
+  } catch (e) {
+    console.log('Install prompt failed:', e);
+    _showManualInstallInstructions();
+  }
+});
+
+// Desktop modal install button
+const desktopInstallBtn = document.getElementById('desktopInstallBtn');
+if (desktopInstallBtn) desktopInstallBtn.addEventListener('click', async () => {
+  if (!_dip) {
+    _showManualInstallInstructions();
+    return;
+  }
+  try {
+    _dip.prompt();
+    const { outcome } = await _dip.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('desktopInstallModal').style.display = 'none';
+      document.getElementById('installBanner').classList.remove('show');
+      _showInstallSuccess();
+    }
+    _dip = null;
+  } catch (e) {
+    console.log('Install prompt failed:', e);
+    _showManualInstallInstructions();
+  }
+});
+
+const desktopInstallCancel = document.getElementById('desktopInstallCancel');
+if (desktopInstallCancel) desktopInstallCancel.addEventListener('click', () => {
+  document.getElementById('desktopInstallModal').style.display = 'none';
+});
+
+const installDismiss = document.getElementById('installDismiss');
+if (installDismiss) installDismiss.addEventListener('click', () => {
+  document.getElementById('installBanner').classList.remove('show');
+});
+
+// Success message
+function _showInstallSuccess() {
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.textContent = _isDesktop ? 
+      '✓ Installed! Look for Phoneway on your desktop/dock' : 
+      '✓ Installed! Check your home screen';
+    toast.className = 'toast toast-show';
+    setTimeout(() => { toast.className = 'toast'; }, 4000);
+  }
+}
+
+// Manual install instructions for unsupported browsers
+function _showManualInstallInstructions() {
+  const modal = document.getElementById('desktopInstallModal');
+  if (modal) {
+    modal.innerHTML = `
+      <div style="background:#161616; border:2px solid var(--gold); border-radius:16px; padding:32px; max-width:420px; text-align:center;">
+        <div style="font-size:48px; margin-bottom:16px;">⚙️</div>
+        <div style="font-size:18px; font-weight:bold; color:var(--gold); margin-bottom:16px;">MANUAL INSTALL</div>
+        <div style="font-size:12px; color:#888; line-height:1.8; margin-bottom:20px; text-align:left;">
+          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Chrome/Edge:</strong></p>
+          <ol style="margin-bottom:16px; padding-left:20px;">
+            <li>Click the <strong style="color:var(--gold);">⊕</strong> icon in the address bar</li>
+            <li>Click <strong style="color:var(--gold);">"Install Phoneway..."</strong></li>
+          </ol>
+          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Safari (Mac):</strong></p>
+          <ol style="padding-left:20px;">
+            <li>Click <strong style="color:var(--gold);">Share</strong> in the toolbar</li>
+            <li>Select <strong style="color:var(--gold);">"Add to Dock"</strong></li>
+          </ol>
+        </div>
+        <button onclick="document.getElementById('desktopInstallModal').style.display='none'" style="background:var(--gold); color:#000; border:none; padding:12px 32px; border-radius:8px; font-weight:bold; cursor:pointer;">GOT IT</button>
+      </div>
+    `;
+    modal.style.display = 'flex';
+  }
+}
+
+// Installed event
+window.addEventListener('appinstalled', () => {
+  var _ib = document.getElementById('installBanner');
+  if (_ib) _ib.classList.remove('show');
+  var _dm = document.getElementById('desktopInstallModal');
+  if (_dm) _dm.style.display = 'none';
+  var _ih = document.getElementById('iosHint');
+  if (_ih) _ih.remove();
+  _showInstallSuccess();
+  if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
+});
+
+// iOS Safari detection
+const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+if (isIos && isSafari && !isStandalone) {
+  setTimeout(() => {
+    const h = document.getElementById('iosHint');
+    if (h) h.classList.add('show');
+  }, 3500);
+}
+
+// Check if already installed (for returning users)
+if (isStandalone) {
+  // Already installed - hide all prompts
+  const installBanner = document.getElementById('installBanner');
+  if (installBanner) installBanner.remove();
+  const desktopInstallModal2 = document.getElementById('desktopInstallModal');
+  if (desktopInstallModal2) desktopInstallModal2.remove();
+  const iosHint = document.getElementById('iosHint');
+  if (iosHint) iosHint.remove();
+}
+</script>
+
+</body>
+</html>

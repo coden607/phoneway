@@ -1,0 +1,146 @@
+{
+  "id": "com.phoneway.scale.v3",
+  "name": "Phoneway Ultra-Precision Scale v4.1",
+  "short_name": "Phoneway",
+  "description": "Professional-grade 0.1g accuracy scale using quantum-inspired 15-sensor fusion, neural networks, and machine learning. Self-calibrating with thermal compensation and laboratory-grade verification.",
+  "version": "4.1.2",
+  "start_url": "./?v=4.1.2",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0d0d0f",
+  "theme_color": "#00d4ff",
+  "categories": ["utilities", "tools", "productivity"],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "icon_override": {
+    "windows": {
+      "src": "icons/icon-windows.ico",
+      "sizes": "256x256"
+    },
+    "macos": {
+      "src": "icons/icon-mac.icns",
+      "sizes": "512x512"
+    }
+  },
+  "icons": [
+    {
+      "src": "icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "⚡ Quick Weigh",
+      "short_name": "Weigh",
+      "url": "./?mode=ultra&v=4.1.2",
+      "description": "Start ultra-precision weighing immediately",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "⚖️ Calibrate",
+      "short_name": "Calibrate",
+      "url": "./?cal=true&v=4.1.2",
+      "description": "Calibrate with known weight for maximum accuracy",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "📊 Accuracy Report",
+      "short_name": "Stats",
+      "url": "./?view=stats&v=4.1.2",
+      "description": "View accuracy metrics and ML training status",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "🔬 Verify",
+      "short_name": "Verify",
+      "url": "./?verify=true&v=4.1.2",
+      "description": "Verify accuracy with known reference weight",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/scale.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Phoneway precision scale with sapphire crystal display"
+    },
+    {
+      "src": "screenshots/desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Phoneway desktop PWA mode"
+    }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "handle_links": "preferred",
+  "lang": "en-US",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "widgets": [
+    {
+      "name": "Quick Weight",
+      "short_name": "Weight",
+      "description": "Quick access to current weight reading",
+      "screenshot": "screenshots/widget.png",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ]
+}
