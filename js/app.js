@@ -84,6 +84,10 @@ class PhonewayApp {
     this._selectedRefWeight = null;
     this._precisionMode = false;
     this._initError = null;
+    this._toastTimer = null;
+    this._calFlowActive = false;
+    this._calFlowStep = 0;
+    this._calFlowStableCount = 0;
     
     // Bind callbacks
     this.scale.onWeight = (g, conf, stable) => this._onWeight(g, conf, stable);
@@ -135,6 +139,7 @@ class PhonewayApp {
         // Show a more prominent message in the display
         if (this.display) this.display.showError('PERM');
         return;
+    }
       }
       
       // Auto-start after short delay
@@ -328,48 +333,91 @@ class PhonewayApp {
   }
 
   _onWeight(grams, confidence, isStable) {
-    if (!this.powered || this.state === 'CALIBRATING' || this._precisionMode) return;
+    if (!this.powered || this._precisionMode) return;
+
+    if (this.state === "CALIBRATING" && this._calFlowActive) {
+      this.currentG = grams;
+
+      const button = document.getElementById("calReadyBtn");
+      const status = document.getElementById("calSensorStatus");
+
+      if (this.stabBar) {
+        const stabilityPct = Math.min(100, confidence * 100);
+        this.stabBar.set(stabilityPct, isStable);
+      }
+
+      this._updateSensorBar("accelBar", confidence);
+
+      if (this._calFlowStep === 2) {
+        if (isStable && grams > 0.2) {
+          this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
+        } else {
+          this._calFlowStableCount = 0;
+        }
+
+        if (status) {
+          status.textContent = isStable ? "STABLE · " + grams.toFixed(2) + "g" : "HOLD STILL...";
+        }
+
+        if (button) {
+          if (this._calFlowStableCount >= 15) {
+            button.disabled = false;
+            button.textContent = "CALIBRATE NOW";
+            this._calFlowStep = 3;
+            if (status) status.textContent = "STABLE · " + grams.toFixed(2) + "g · TAP CALIBRATE NOW";
+          } else {
+            button.disabled = true;
+            button.textContent = "WAITING FOR STABLE";
+          }
+        }
+      }
+      return;
+    }
+    }
 
     if (!this.scale.calibrated && !this._pendingCalibration) {
       this.currentG = 0;
       if (this.display) this.display.setValue(0);
       this._updateAccuracyDisplay(0);
-      this._setState('CAL REQUIRED');
+      this._setState("CAL REQUIRED");
       return;
     }
-    
+    }
+
     this.currentG = grams;
-    
+
     if (!this._holdActive) {
       const u = UNITS[this.unitIdx];
       if (this.display) {
         this.display.setValue(grams * u.factor);
       }
     }
-    
+
     if (this.stabBar) {
       const stabilityPct = Math.min(100, confidence * 100);
       this.stabBar.set(stabilityPct, isStable);
     }
-    
-    this._updateSensorBar('accelBar', confidence);
-    
+
+    this._updateSensorBar("accelBar", confidence);
+
     if (grams > 0.2) {
-      this._setState(isStable ? 'STABLE' : 'MEASURING');
+      this._setState(isStable ? "STABLE" : "MEASURING");
     } else {
-      this._setState('READY');
+      this._setState("READY");
     }
-    
+
     this._updateSurfaceLabel();
     this._updateGradeLabel();
     this._updatePrecisionLabel();
     this._updateAccuracyDisplay(confidence);
     this._updateCalibrationGuide();
-    
+
     if (this._selectedRefWeight && isStable) {
       this._updateVerifyComparison();
     }
   }
+
+
 
   _updateAccuracyDisplay(confidence) {
     const evidence = this.scale.getAccuracyEvidence(confidence);
@@ -502,6 +550,7 @@ class PhonewayApp {
 
     if (this._pendingCalibration && this.currentG > 0.2) {
       this._pendingCalibration = false;
+          this._setState("READY");
 
       const result = this.scale.calibrate(this.calWeightG);
       if (result.success) {
@@ -520,16 +569,17 @@ class PhonewayApp {
       }
       return;
     }
+    }
 
     hapticFeedback([50]);
     this._setState('ZEROING');
-    this._showToast('Taring — hold phone perfectly still...', 4000);
+    this._showToast('Taring — hold phone perfectly still...', 7000);
 
     await this.scale.tare();
 
     this._setState('READY');
     if (this.display) this.display.setValue(0);
-    this._showToast('Tared — scale zeroed', 2000);
+    this._showToast('Tared — scale zeroed', 3500);
   }
 
   _showCalModal() {
@@ -631,19 +681,97 @@ class PhonewayApp {
   }
 
   async _startCalibration() {
-    const onboardModal2 = document.getElementById('onboardModal');
-    if (onboardModal2 && onboardModal2.style) onboardModal2.style.display = 'none';
+    const onboardModal2 = document.getElementById("onboardModal");
+    if (onboardModal2 && onboardModal2.style) onboardModal2.style.display = "none";
 
-    this._setState('CALIBRATING');
-    this._showToast('Step 1: Remove all weight — taring...', 5000);
+    const overlay = document.getElementById("stepOverlay");
+    const body = overlay ? overlay.querySelector(".step-body") : null;
+    const status = document.getElementById("calSensorStatus");
+    const progress = document.getElementById("calStepProgress");
+    const button = document.getElementById("calReadyBtn");
 
-    // Wait for tare to fully settle (100 samples + 20 warmup ≈ 2 s at 60 Hz)
-    await this.scale.tare();
+    if (!overlay || !body || !status || !progress || !button) {
+      this._setState("CALIBRATING");
+      this._showToast("Step 1: Remove all weight — taring...", 9000);
+      await this.scale.tare();
+      this._showToast("Step 2: Place " + this.calWeightG + "g weight, then press TARE to calibrate", 12000);
+      this._pendingCalibration = true;
+      this._updateCalibrationGuide();
+      return;
+    }
 
-    this._showToast(`Step 2: Place ${this.calWeightG}g weight, then press TARE to calibrate`, 6000);
-    this._pendingCalibration = true;
-    this._updateCalibrationGuide();
-    this._setState('READY');
+    this._calFlowActive = true;
+    this._calFlowStep = 1;
+    this._calFlowStableCount = 0;
+    this._pendingCalibration = false;
+    this._setState("CALIBRATING");
+    overlay.style.display = "flex";
+    overlay.classList.add("show");
+
+    const render = (step) => {
+      const steps = {
+        1: {
+          body: "STEP 1\n\nRemove all weight from the phone, then tap START TARE. The app will zero the baseline first.",
+          status: "REMOVE ALL WEIGHT",
+          progress: "33%",
+          button: "START TARE"
+        },
+        2: {
+          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g weight on the phone and keep it still. The app will unlock the next step when the reading settles.",
+          status: "WAIT FOR STABLE READING",
+          progress: "66%",
+          button: "WAITING FOR STABLE"
+        },
+        3: {
+          body: "STEP 3\n\nThe reading is stable. Tap CALIBRATE NOW to lock it in.",
+          status: "READY TO CALIBRATE",
+          progress: "100%",
+          button: "CALIBRATE NOW"
+        }
+      };
+      const cfg = steps[step];
+      body.textContent = cfg.body;
+      status.textContent = cfg.status;
+      progress.style.width = cfg.progress;
+      button.textContent = cfg.button;
+      button.disabled = step === 2;
+    };
+
+    render(1);
+
+    button.onclick = async () => {
+      if (this._calFlowStep === 1) {
+        button.disabled = true;
+        status.textContent = "TARING...";
+        body.textContent = "Removing offset and waiting for a clean zero. Keep the phone still.";
+        await this.scale.tare();
+        this._calFlowStep = 2;
+        this._calFlowStableCount = 0;
+        render(2);
+        return;
+    }
+      }
+
+      if (this._calFlowStep === 3) {
+        this._pendingCalibration = true;
+        status.textContent = "CALIBRATING...";
+        button.disabled = true;
+        await this._tare();
+        if (this.scale.calibrated) {
+          overlay.classList.remove("show");
+          overlay.style.display = "none";
+          this._calFlowActive = false;
+          this._calFlowStep = 0;
+          this._pendingCalibration = false;
+          this._setState("READY");
+          button.onclick = null;
+        } else {
+          this._calFlowStep = 2;
+          this._calFlowStableCount = 0;
+          render(2);
+        }
+      }
+    };
   }
 
   _cycleUnits() {
@@ -783,6 +911,7 @@ class PhonewayApp {
     if (!verification.valid) {
       this._showToast(verification.error, 2500);
       return;
+    }
     }
     this._sendTelemetry("verify", {
       referenceGrams: verification.knownGrams,
@@ -969,10 +1098,12 @@ class PhonewayApp {
     el.textContent = msg;
     el.style.opacity = '1';
     el.classList.add('toast-show');
-    
-    setTimeout(() => {
+
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
       el.style.opacity = '0';
       el.classList.remove('toast-show');
+      this._toastTimer = null;
     }, duration);
   }
 }

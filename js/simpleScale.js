@@ -351,11 +351,11 @@ class SimpleScale {
     this.kalmanZ = new SimpleKalman({ R: 0.005, Q: 0.0005 });
 
     // Output smoothing and stability
-    this.emaWeight     = new EMA(0.12);
-    this.stabilityCheck = new MovingAverage(40);
+    this.emaWeight     = new EMA(0.08);
+    this.stabilityCheck = new MovingAverage(60);
 
     // 0.05 g deadband for ±0.1 g display resolution
-    this.deadbandThreshold = 0.05;
+    this.deadbandThreshold = 0.08;
     this.lastDisplayValue  = 0;
     this.stableCounter     = 0;
 
