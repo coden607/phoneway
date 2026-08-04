@@ -524,14 +524,11 @@ class SimpleScale {
     // Fuse horizontal, tilt-corrected, and vertical motion channels conservatively.
     const tiltG = Math.max(0, this.tiltCorrector.correctGrams(rawG));
     const verticalG = Math.max(0, Math.abs(dz) * 180);
-    const verticalConfidence = Math.min(0.35, verticalG > 0.05 ? 0.35 : 0);
-    const candidates = [rawG, tiltG];
-    if (verticalConfidence > 0) candidates.push(verticalG);
-    candidates.sort((a, b) => a - b);
-    const medianG = candidates[Math.floor(candidates.length / 2)];
-    const agreeing = candidates.filter(value => Math.abs(value - medianG) <= Math.max(0.15, medianG * 0.25));
-    const disagreement = Math.max(...candidates) - Math.min(...candidates);
-    rawG = agreeing.reduce((sum, value) => sum + value, 0) / agreeing.length;
+    // Vertical and tilt channels gate confidence only; raw grams stay on the
+    // calibrated primary channel so sensor noise cannot make the display drift.
+    const verticalAgreement = Math.max(0, 1 - Math.abs(verticalG - rawG) / Math.max(0.5, rawG * 0.5));
+    const tiltAgreement = Math.max(0, 1 - Math.abs(tiltG - rawG) / Math.max(0.5, rawG * 0.5));
+    const disagreement = 1 - (verticalAgreement + tiltAgreement) / 2;
 
     // 0.05 g noise floor
     if (rawG < 0.05) rawG = 0;
@@ -563,7 +560,7 @@ class SimpleScale {
     // Confidence — calibration multiplier makes the % realistic:
     // uncalibrated max ~35%, 1-pt ~65%, 2-pt ~85%, 3-pt+ ~100%
     const stabilityScore = Math.max(0, 1 - stdDev / 0.15);
-    const fusionScore = Math.max(0, 1 - disagreement / Math.max(0.25, rawG * 0.35));
+    const fusionScore = Math.max(0, 1 - disagreement);
     const surfaceScore   = this._getSurfaceQualityScore();
     const signalScore    = this.calibrated ? 0.9 : Math.min(1, this.rawWeight / 2);
     const calPoints      = this.multiCal.getPointCount();

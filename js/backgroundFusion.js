@@ -65,7 +65,7 @@ class BackgroundSensorFusion {
     const weightSum = agreeing.reduce((sum, channel) => sum + Math.max(0.05, channel.confidence), 0);
     const fusedGrams = agreeing.reduce((sum, channel) => sum + channel.grams * Math.max(0.05, channel.confidence), 0) / weightSum;
     const agreement = agreeing.length / candidates.length;
-    const fusedConfidence = Math.max(0, Math.min(0.99, (confidence * 0.75 + agreement * 0.25) * this.gyroQuality));
+    const fusedConfidence = Math.max(0, Math.min(0.99, (confidence * 0.85 + agreement * 0.15) * this.gyroQuality * this.touchQuality));
 
     return { grams: fusedGrams, confidence: fusedConfidence, stable: stable && agreement >= 0.5, channelCount: agreeing.length };
   }
