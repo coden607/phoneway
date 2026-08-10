@@ -402,15 +402,30 @@ class SimpleScale {
     this._handler = (e) => this._handleMotion(e);
     window.addEventListener('devicemotion', this._handler, { passive: true });
     this.active = true;
-    if (!this.baseline) {
-      setTimeout(() => this.tare(), 1000);
-    }
+    // A saved baseline is calibration metadata, not a valid zero after restart, orientation, or thermal change.
+    // Always acquire a fresh empty-phone baseline before displaying readings.
+    this.baseline = null;
+    if (this._startTareTimer) clearTimeout(this._startTareTimer);
+    this._startTareTimer = setTimeout(() => {
+      this._startTareTimer = null;
+      if (this.active) this.tare();
+    }, 1000);
   }
 
   stop() {
     if (!this.active) return;
     window.removeEventListener('devicemotion', this._handler);
     this.active = false;
+    if (this._startTareTimer) {
+      clearTimeout(this._startTareTimer);
+      this._startTareTimer = null;
+    }
+    this._tare_in_progress = false;
+    if (this._tare_resolve) {
+      this._tare_resolve();
+      this._tare_resolve = null;
+    }
+    this.baseline = null;
   }
 
   _handleMotion(e) {
@@ -741,7 +756,8 @@ class SimpleScale {
       this.verificationHistory.shift();
     }
 
-    this.tempComp.learnDrift(measured);
+    // Reference-weight readings are real mass, not empty-scale drift samples.
+    // Learning them here would make the displayed weight trend downward after verification.
     this._saveCalibration();
 
     return result;
