@@ -454,10 +454,12 @@ class PhonewayApp {
           if (this._calFlowStableCount >= 15) {
             this._calFlowLockedWeight = stableReading;
             this.currentG = stableReading;
+            this._pendingCalibration = true;
+            this._tare();
             button.disabled = false;
-            button.textContent = "CALIBRATE NOW";
+            button.textContent = this.scale.calibrated ? "DONE" : "CALIBRATE NOW";
             this._calFlowStep = 3;
-            if (status) status.textContent = "STABLE · " + stableReading.toFixed(2) + "g · TAP CALIBRATE NOW";
+            if (status) status.textContent = this.scale.calibrated ? "CALIBRATED · " + stableReading.toFixed(2) + "g · TAP DONE" : "STABLE · " + stableReading.toFixed(2) + "g · TAP CALIBRATE NOW";
           } else {
             button.disabled = true;
             button.textContent = "WAITING FOR LOCK";
@@ -641,8 +643,8 @@ class PhonewayApp {
     if (!this.powered) return;
 
     this._holdActive = false;
-
     if (this._pendingCalibration && this.currentG > 0.2) {
+
       this._pendingCalibration = false;
 
       const result = this.scale.calibrate(this.calWeightG);
@@ -857,6 +859,16 @@ class PhonewayApp {
       }
 
       if (this._calFlowStep === 3) {
+        if (this.scale.calibrated) {
+          overlay.classList.remove("show");
+          overlay.style.display = "none";
+          this._calFlowActive = false;
+          this._calFlowStep = 0;
+          this._pendingCalibration = false;
+          this._setState("READY");
+          button.onclick = null;
+          return;
+        }
         this._pendingCalibration = true;
         status.textContent = "CALIBRATING...";
         button.disabled = true;
