@@ -815,6 +815,8 @@ class PhonewayApp {
       status.textContent = cfg.status;
       progress.style.width = cfg.progress;
       button.textContent = cfg.button;
+      // The walkthrough button starts hidden in the HTML; show it so START TARE is tappable.
+      button.style.display = "block";
       button.disabled = step === 2;
     };
 
