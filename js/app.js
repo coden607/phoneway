@@ -428,7 +428,7 @@ class PhonewayApp {
       if (this._calFlowStep === 2) {
         if (Number.isFinite(grams)) {
           this._calFlowReadings.push(Math.max(0, grams));
-          if (this._calFlowReadings.length > 15) this._calFlowReadings.shift();
+          if (this._calFlowReadings.length > 30) this._calFlowReadings.shift();
         }
 
         const sortedReadings = [...this._calFlowReadings].sort((a, b) => a - b);
@@ -440,22 +440,32 @@ class PhonewayApp {
         if (this.display && Number.isFinite(stableReading)) {
           this.display.setValue(stableReading * UNITS[this.unitIdx].factor);
         }
-        if (isStable && stableReading > 0.2) {
+        const deviations = this._calFlowReadings.map(value => Math.abs(value - stableReading)).sort((a, b) => a - b);
+        const medianDeviation = deviations.length ? deviations[Math.floor(deviations.length / 2)] : Infinity;
+        const calibrationStable = this._calFlowReadings.length >= 20
+          && stableReading > 0.2
+          && medianDeviation <= Math.max(0.75, stableReading * 0.15)
+          && !this.scale.motionBlocked
+          && this.scale.motionQuality >= 0.5;
+        if (calibrationStable) {
           this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
         } else {
           this._calFlowStableCount = 0;
         }
 
         if (status) {
-          status.textContent = isStable ? "STABLE · " + stableReading.toFixed(2) + "g" : "HOLD STILL · " + stableReading.toFixed(2) + "g";
+          status.textContent = calibrationStable ? "STABLE · " + stableReading.toFixed(2) + "g" : "HOLD STILL · " + stableReading.toFixed(2) + "g";
         }
 
         if (button) {
-          if (this._calFlowStableCount >= 15) {
+          if (this._calFlowStableCount >= 20) {
+            const restoreCoreStable = this.scale.isStable;
+            if (!isStable && calibrationStable) this.scale.isStable = true;
             this._calFlowLockedWeight = stableReading;
             this.currentG = stableReading;
             this._pendingCalibration = true;
             this._tare();
+            this.scale.isStable = restoreCoreStable;
             button.disabled = false;
             button.textContent = this.scale.calibrated ? "DONE" : "CALIBRATE NOW";
             this._calFlowStep = 3;
