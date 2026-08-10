@@ -94,6 +94,8 @@ class PhonewayApp {
     this._calFlowActive = false;
     this._calFlowStep = 0;
     this._calFlowStableCount = 0;
+    this._calFlowReadings = [];
+    this._calFlowLockedWeight = null;
     this._awaitingMotionPermission = false;
     this._powerTransitioning = false;
     this._powerButtonBusy = false;
@@ -424,22 +426,38 @@ class PhonewayApp {
       this._updateSensorBar("accelBar", confidence);
 
       if (this._calFlowStep === 2) {
-        if (isStable && grams > 0.2) {
+        if (Number.isFinite(grams)) {
+          this._calFlowReadings.push(Math.max(0, grams));
+          if (this._calFlowReadings.length > 15) this._calFlowReadings.shift();
+        }
+
+        const sortedReadings = [...this._calFlowReadings].sort((a, b) => a - b);
+        const middle = Math.floor(sortedReadings.length / 2);
+        const stableReading = sortedReadings.length
+          ? sortedReadings[middle]
+          : Math.max(0, grams || 0);
+        this.currentG = stableReading;
+        if (this.display && Number.isFinite(stableReading)) {
+          this.display.setValue(stableReading * UNITS[this.unitIdx].factor);
+        }
+        if (isStable && stableReading > 0.2) {
           this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
         } else {
           this._calFlowStableCount = 0;
         }
 
         if (status) {
-          status.textContent = isStable ? "STABLE · " + grams.toFixed(2) + "g" : "HOLD STILL...";
+          status.textContent = isStable ? "STABLE · " + stableReading.toFixed(2) + "g" : "HOLD STILL · " + stableReading.toFixed(2) + "g";
         }
 
         if (button) {
           if (this._calFlowStableCount >= 15) {
+            this._calFlowLockedWeight = stableReading;
+            this.currentG = stableReading;
             button.disabled = false;
             button.textContent = "CALIBRATE NOW";
             this._calFlowStep = 3;
-            if (status) status.textContent = "STABLE · " + grams.toFixed(2) + "g · TAP CALIBRATE NOW";
+            if (status) status.textContent = "STABLE · " + stableReading.toFixed(2) + "g · TAP CALIBRATE NOW";
           } else {
             button.disabled = true;
             button.textContent = "WAITING FOR LOCK";
@@ -784,6 +802,8 @@ class PhonewayApp {
     this._calFlowActive = true;
     this._calFlowStep = 1;
     this._calFlowStableCount = 0;
+    this._calFlowReadings = [];
+    this._calFlowLockedWeight = null;
     this._pendingCalibration = false;
     this._setState("CALIBRATING");
     overlay.style.display = "flex";
@@ -830,6 +850,8 @@ class PhonewayApp {
         await this.scale.tare();
         this._calFlowStep = 2;
         this._calFlowStableCount = 0;
+    this._calFlowReadings = [];
+    this._calFlowLockedWeight = null;
         render(2);
         return;
       }
@@ -850,6 +872,8 @@ class PhonewayApp {
         } else {
           this._calFlowStep = 2;
           this._calFlowStableCount = 0;
+    this._calFlowReadings = [];
+    this._calFlowLockedWeight = null;
           render(2);
         }
       }
