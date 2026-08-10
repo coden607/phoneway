@@ -68,7 +68,7 @@ class BackgroundSensorFusion {
     const agreement = agreeing.length / candidates.length;
     const fusedConfidence = Math.max(0, Math.min(0.99, (confidence * 0.85 + agreement * 0.15) * this.gyroQuality * this.touchQuality));
 
-    return { grams: fusedGrams, confidence: fusedConfidence, stable: stable && agreement >= 0.5, channelCount: agreeing.length };
+    return { grams: fusedGrams, confidence: fusedConfidence, stable, channelCount: agreeing.length };
   }
 
   _feed(name, grams, confidence) {
