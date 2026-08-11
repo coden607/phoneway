@@ -444,9 +444,9 @@ class PhonewayApp {
         const medianDeviation = deviations.length ? deviations[Math.floor(deviations.length / 2)] : Infinity;
         const calibrationStable = this._calFlowReadings.length >= 20
           && stableReading > 0.2
-          && medianDeviation <= Math.max(0.75, stableReading * 0.15)
+          && medianDeviation <= Math.max(1.5, stableReading * 0.30)
           && !this.scale.motionBlocked
-          && this.scale.motionQuality >= 0.5;
+          && confidence >= 0.05;
         if (calibrationStable) {
           this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
         } else {
@@ -460,12 +460,17 @@ class PhonewayApp {
         if (button) {
           if (this._calFlowStableCount >= 20) {
             const restoreCoreStable = this.scale.isStable;
-            if (!isStable && calibrationStable) this.scale.isStable = true;
+            const restoreMotionQuality = this.scale.motionQuality;
+            if (!isStable && calibrationStable) {
+              this.scale.isStable = true;
+              this.scale.motionQuality = Math.max(this.scale.motionQuality, 0.5);
+            }
             this._calFlowLockedWeight = stableReading;
             this.currentG = stableReading;
             this._pendingCalibration = true;
             this._tare();
             this.scale.isStable = restoreCoreStable;
+            this.scale.motionQuality = restoreMotionQuality;
             button.disabled = false;
             button.textContent = this.scale.calibrated ? "DONE" : "CALIBRATE NOW";
             this._calFlowStep = 3;
