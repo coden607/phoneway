@@ -2,7 +2,7 @@
  * sw.js — Service Worker for Phoneway Precision Scale v4.1.3
  */
 
-const CACHE = 'phoneway-v4.1.3-cal-progress-2';
+const CACHE = 'phoneway-v4.1.3-e2e-1';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
