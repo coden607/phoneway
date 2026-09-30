@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v4.3.0-fusion';
+const CACHE = 'phoneway-v4.1.3-cal-progress';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -43,7 +43,6 @@ const ASSETS = [
   BASE + 'js/predictiveCalibration.js',
   BASE + 'js/telemetry.js',
   BASE + 'js/simpleScale.js',
-  BASE + 'js/backgroundFusion.js',
   BASE + 'js/referenceWeights.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',
@@ -55,7 +54,6 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => {
       console.log('[SW] Caching', ASSETS.length, 'assets');
-      // allSettled: one missing/failed asset never aborts the whole SW install
       return Promise.allSettled(
         ASSETS.map(url =>
           fetch(url).then(res => {
@@ -80,35 +78,19 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  
-  // Network-first for API calls (telemetry, stats) — never cache these
   const isAPI = e.request.url.includes('/api/') || e.request.url.includes('vercel');
-  
   if (isAPI) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
-    );
-    return;
-  }
-  
-  const isNavigation = e.request.mode === "navigate" || e.request.destination === "document";
-  if (isNavigation) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
-
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) {
-        // Check for updates in background
         fetch(e.request).then(res => {
-          if (res && res.ok) {
-            caches.open(CACHE).then(c => c.put(e.request, res));
-          }
+          if (res && res.ok) caches.open(CACHE).then(c => c.put(e.request, res));
         }).catch(() => {});
         return cached;
       }
-      
       return fetch(e.request).then(res => {
         if (res && res.ok) {
           const clone = res.clone();
@@ -120,9 +102,6 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Handle messages from main thread
 self.addEventListener('message', e => {
-  if (e.data === 'skipWaiting') {
-    self.skipWaiting();
-  }
+  if (e.data === 'skipWaiting') self.skipWaiting();
 });
