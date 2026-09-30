@@ -2,7 +2,7 @@
  * sw.js — Service Worker for Phoneway Precision Scale v4.1.3
  */
 
-const CACHE = 'phoneway-v4.1.3-e2e-1';
+const CACHE = 'phoneway-v4.1.3-e2e-2';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -14,6 +14,7 @@ const ASSETS = [
   BASE + 'js/sensors.js',
   BASE + 'js/audio.js',
   BASE + 'js/display.js',
+  BASE + 'js/liveUi.js',
   BASE + 'js/vibrationHammer.js',
   BASE + 'js/genericSensors.js',
   BASE + 'js/cameraSensor.js',
