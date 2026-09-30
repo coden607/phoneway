@@ -1,21 +1,11 @@
 /**
  * display.js — 7-segment display renderer for Phoneway
- *
- * Creates authentic-looking digital scale readouts using
- * CSS-positioned segment divs with neon green glow effects.
- *
- * Segment layout (per digit):
- *
- *    ┌─ a ─┐
- *    f     b
- *    ├─ g ─┤
- *    e     c
- *    └─ d ─┘
  */
 
 'use strict';
 
-// [a, b, c, d, e, f, g]  — 1 = on, 0 = off
+import './liveUi.js';
+
 const SEG = {
   '0': [1,1,1,1,1,1,0],
   '1': [0,1,1,0,0,0,0],
@@ -41,9 +31,6 @@ const SEG = {
 
 const NAMES = ['a','b','c','d','e','f','g'];
 
-/* ═══════════════════════════════════════════════════════════════
-   SevenSegmentDisplay
-═══════════════════════════════════════════════════════════════ */
 class SevenSegmentDisplay {
   constructor(container, digits = 5, decimals = 1) {
     this.container = container;
@@ -59,24 +46,19 @@ class SevenSegmentDisplay {
     if (!this.container) return;
     this.container.innerHTML = '';
     this.container.classList.add('seg-display');
-
     for (let i = 0; i < this.digits; i++) {
       const wrap = document.createElement('div');
       wrap.className = 'seg-digit';
-
       const segs = {};
       for (const name of NAMES) {
         const el = document.createElement('div');
-        el.className = `seg seg-${name} seg-off`;
+        el.className = 'seg seg-' + name + ' seg-off';
         segs[name] = el;
         wrap.appendChild(el);
       }
-
-      // Decimal point
       const dot = document.createElement('div');
       dot.className = 'seg-dot' + (i === this._dotPos ? '' : ' seg-dot-hidden');
       wrap.appendChild(dot);
-
       this._els.push({ segs, dot });
       this.container.appendChild(wrap);
     }
@@ -87,22 +69,16 @@ class SevenSegmentDisplay {
       this._showString('-----');
       return;
     }
-
-    // Clamp and format
     const maxVal = Math.pow(10, this.digits - this.decimals) - Math.pow(10, -this.decimals);
     value = Math.min(Math.abs(value), maxVal);
-
     let str = value.toFixed(this.decimals);
     str = str.replace(/\./g, '');
-
-    // Pad left
     while (str.length < this.digits) str = ' ' + str;
     if (negative && str[0] === ' ') {
       const firstDigit = str.search(/[0-9]/);
       const pos = Math.max(0, firstDigit - 1);
       str = str.substring(0, pos) + '-' + str.substring(pos + 1);
     }
-
     this._showString(str);
   }
 
@@ -149,9 +125,6 @@ class SevenSegmentDisplay {
   showReady() { this._showString('rdy '); }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   StabilityBar
-═══════════════════════════════════════════════════════════════ */
 class StabilityBar {
   constructor(el) {
     this.el = el;
@@ -171,32 +144,15 @@ class StabilityBar {
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   LED indicator helper
-═══════════════════════════════════════════════════════════════ */
 class LED {
-  constructor(el) { 
-    this.el = el; 
-  }
-  on(color) { 
-    if (this.el) this.el.className = `led led-${color || 'green'}`; 
-  }
-  off() { 
-    if (this.el) this.el.className = 'led led-off'; 
-  }
-  blink(ms = 500) {
-    this.on();
-    setTimeout(() => this.off(), ms / 2);
-  }
+  constructor(el) { this.el = el; }
+  on(color) { if (this.el) this.el.className = 'led led-' + (color || 'green'); }
+  off() { if (this.el) this.el.className = 'led led-off'; }
+  blink(ms = 500) { this.on(); setTimeout(() => this.off(), ms / 2); }
 }
 
-function delay(ms) { 
-  return new Promise(r => setTimeout(r, ms)); 
-}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-/* ═══════════════════════════════════════════════════════════════
-   AccuracyDisplay
-═══════════════════════════════════════════════════════════════ */
 class AccuracyDisplay {
   constructor(digitContainer, barEl) {
     this.digitEl = digitContainer;
@@ -216,7 +172,7 @@ class AccuracyDisplay {
       const segs = {};
       for (const name of NAMES) {
         const el = document.createElement('div');
-        el.className = `seg seg-${name} seg-off`;
+        el.className = 'seg seg-' + name + ' seg-off';
         segs[name] = el;
         wrap.appendChild(el);
       }
@@ -227,13 +183,11 @@ class AccuracyDisplay {
 
   set(pct) {
     const clamped = Math.min(100, Math.max(0, Math.round(pct)));
-
     if (Math.abs(clamped - this._prev) >= 3 && this._prev >= 0) {
       if (this.digitEl) this.digitEl.classList.add('acc-flash');
       setTimeout(() => { if (this.digitEl) this.digitEl.classList.remove('acc-flash'); }, 320);
     }
     this._prev = clamped;
-
     const str = String(clamped).padStart(this._digits, ' ');
     for (let i = 0; i < this._digits; i++) {
       const ch = str[i] != null ? str[i] : ' ';
@@ -246,7 +200,6 @@ class AccuracyDisplay {
         });
       }
     }
-
     if (this.barEl) {
       this.barEl.style.width = clamped + '%';
       this.barEl.className = 'acc-bar-fill ' + (
@@ -258,14 +211,10 @@ class AccuracyDisplay {
   }
 
   async startup() {
-    this.set(88);
-    await delay(600);
-    this.set(0);
-    await delay(200);
-    this.set(88);
-    await delay(300);
-    this.set(0);
-    await delay(150);
+    this.set(88); await delay(600);
+    this.set(0); await delay(200);
+    this.set(88); await delay(300);
+    this.set(0); await delay(150);
   }
 }
 
