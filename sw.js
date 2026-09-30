@@ -1,15 +1,8 @@
 /**
- * sw.js — Service Worker for Phoneway Precision Scale v3.1
- * Full offline capability via cache-first strategy.
- * 
- * NEW in v3.1:
- * - Quantum-inspired fusion engine
- * - Advanced thermal compensation
- * - Professional verification protocols
- * - Premium laboratory-grade UI
+ * sw.js — Service Worker for Phoneway Precision Scale v4.1.3
  */
 
-const CACHE = 'phoneway-v4.1.3-cal-progress';
+const CACHE = 'phoneway-v4.1.3-cal-progress-2';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -17,7 +10,6 @@ const ASSETS = [
   BASE + 'index.html',
   BASE + 'manifest.json',
   BASE + 'css/style.css',
-
   BASE + 'js/kalman.js',
   BASE + 'js/sensors.js',
   BASE + 'js/audio.js',
@@ -38,12 +30,11 @@ const ASSETS = [
   BASE + 'js/thermalCompensation.js',
   BASE + 'js/advancedVerification.js',
   BASE + 'data/community-priors.json',
-
   BASE + 'js/adaptiveFilter.js',
   BASE + 'js/predictiveCalibration.js',
   BASE + 'js/telemetry.js',
+  BASE + 'js/scaleMath.js',
   BASE + 'js/simpleScale.js',
-  BASE + 'js/referenceWeights.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',
   BASE + 'icons/icon-192.png',
@@ -53,7 +44,6 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => {
-      console.log('[SW] Caching', ASSETS.length, 'assets');
       return Promise.allSettled(
         ASSETS.map(url =>
           fetch(url).then(res => {
@@ -73,7 +63,6 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
-  console.log('[SW] Activated:', CACHE);
 });
 
 self.addEventListener('fetch', e => {
