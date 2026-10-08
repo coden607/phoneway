@@ -39,57 +39,58 @@ npx live-server .    # auto-reload variant
 ### Signal Chain (Data Flow)
 
 ```
-Device Sensors
-  ├── DeviceMotionEvent → MotionSensor
-  │     └── KalmanFilter2D → MedianFilter → MovingAverageFilter → ParticleFilter
-  ├── Generic Sensor API → GenericSensorManager
-  │     ├── LinearAccelerationSensor → injects into MotionSensor pipeline
-  │     ├── Gyroscope → GyroGate (motion confidence multiplier)
-  │     ├── GravitySensor → TiltCorrector
-  │     └── Magnetometer → onMagAnomaly callback
-  ├── VibrationHammer: navigator.vibrate() → accel ring-down → FFT → resonant freq
-  ├── AudioAnalyzer: getUserMedia → FFT (16384-pt, 16-frame avg) → resonant freq
-  ├── CameraSensor: optical-flow MAD → FFT → resonant freq
-  ├── TouchSensor: touch events → contact force/area
-  └── Environmental Sensors
-        ├── Barometer → pressure stability
-        ├── Battery → thermal compensation
-        └── Orientation → positioning quality
-
-All sensors call BayesianFusion.update(name, grams, confidence)
-  └── BayesianFusion._fuse() → ExpSmooth → onFused(grams, confidence)
-        └── PhonewayApp._onFused() → display + stability + accuracy + verify panel
+DeviceMotionEvent (accelerometer + gravity, m/s²)
+  └── SimpleScale
+        ├── BaselineRecorder (empty-scale average, stillness-gated)
+        ├── tilt-delta = |gravity-axis deflection under load| − baseline
+        ├── MultiPointCalibration curve (tilt-delta → grams)
+        ├── MedianFilter → MovingAverageFilter → AdaptiveKalmanFilter → ExpSmooth
+        ├── BackgroundSensorFusion (passive motion validators — modulate
+        │   confidence ONLY; never invent grams)
+        └── verifyAgainstKnown() → VerificationLedger (localStorage)
+                  └── accuracyClaim() = worst |error| of last 5 verifies,
+                      rounded UP to 0.1g → the only ±Xg text in the app
 ```
+
+FUSION-UNITS RULE: only quantities in the SAME unit may share a fusion
+channel. Orientation tilt is degrees — it must never be `mark()`-ed into an
+acceleration (m/s²) channel. See js/simpleScale.js `_handleOrient` and
+skills/diagnose.
 
 ### Module Responsibilities
 
 | File | Responsibility |
 |------|---------------|
-| `js/app.js` | `PhonewayApp` class — boots everything, state machine, calibration wizard, UI event binding |
-| `js/sensors.js` | `MotionSensor`, `TouchSensor`, `BayesianFusion`, `BaselineRecorder` |
-| `js/kalman.js` | Math primitives: `AdaptiveKalmanFilter`, `ParticleFilter`, `MovingAverageFilter`, `MedianFilter`, `ExpSmooth`, `FFT`, `WindowFn` |
-| `js/audio.js` | `AudioAnalyzer` — mic → Blackman-Harris windowed FFT → resonant frequency → mass |
-| `js/vibrationHammer.js` | `VibrationHammer` — vibration motor → accel ring-down → FFT → resonant freq |
-| `js/genericSensors.js` | `GenericSensorManager` — LinearAccelerationSensor, Gyroscope, Magnetometer |
-| `js/cameraSensor.js` | `CameraSensor` — optical-flow → FFT → resonant freq |
+| `js/app.js` | `PhonewayApp` class — boots everything, state machine, calibration wizard, UI event binding. Imports the UI modules below. |
+| `js/simpleScale.js` | `SimpleScale` — the live measurement path: baseline, tilt-delta→grams, calibration curve, verification. Owns the `VerificationLedger`. |
+| `js/verificationLedger.js` | The honesty engine — localStorage ledger; the ONLY source of ±Xg claims. |
+| `js/scaleMath.js` | Math primitives: `MultiPointCalibration`, `SensorStabilityChecker`, `TemperatureCompensator`, `GRAVITY`. |
+| `js/kalman.js` | Filters: `AdaptiveKalmanFilter`, `MedianFilter`, `ExpSmooth`, `FFT`, `WindowFn` |
+| `js/backgroundFusion.js` | `BackgroundSensorFusion` — passive motion validators (modulate confidence only). |
+| `js/sensorCombinations.js` | `GyroGate`, `FrequencyConsensus`, `PassiveResonance`, `TiltCorrector` |
+| `js/audio.js` | `AudioAnalyzer` — mic → Blackman-Harris windowed FFT → resonant frequency → mass (cross-check path) |
+| `js/cameraSensor.js` | `CameraSensor` — optical-flow → FFT → resonant freq (cross-check path) |
+| `js/deviceCompat.js` | Cross-device iOS/Android permission & capability handling |
 | `js/display.js` | `SevenSegmentDisplay`, `StabilityBar`, `LED`, `AccuracyDisplay` |
 | `js/referenceWeights.js` | `REF_WEIGHTS` database, `ReferenceWeightVerifier` |
-| `js/mlCalibration.js` | Neural network (12→24→16→1 MLP) for weight correction |
-| `js/advancedFusion.js` | `AdvancedFusionEngine` with particle filter + sensor agreement |
-| `js/ultraPrecision.js` | `UltraPrecisionEngine` for 0.1g precision measurement |
-| `js/environmentalSensors.js` | Barometer, battery, orientation compensation |
-| `js/sensorCombinations.js` | `GyroGate`, `FrequencyConsensus`, `PassiveResonance`, `TiltCorrector` |
-| `js/precisionEngine.js` | `PrecisionMeasurement`, `OutlierRejectionFilter`, `ConvergenceDetector` |
-| `js/adaptiveFilter.js` | `AdaptiveSignalProcessor`, `ContinuousKalmanFilter` |
-| `js/predictiveCalibration.js` | `CalibrationPredictor`, `NonlinearCalibration` |
-| `js/quantumFusion.js` | `QuantumFusionEngine` — quantum-inspired state superposition |
-| `js/thermalCompensation.js` | `RealTimeCompensator` — battery thermal drift |
-| `js/advancedVerification.js` | `AdvancedVerificationEngine`, `NISTReferenceDatabase` |
-| `js/learningEngine.js` | `LearningEngine` — crowd-sourced priors |
 | `js/telemetry.js` | Anonymous capability reporting |
+| `js/liveUi.js` | Dynamic UI bits (toast, panels) |
+| `js/version.js` | `VERSION` — single source of truth for the app version string. |
+| `js/versionCheck.js` | Classic script: version check / auto-update (must run before modules). |
+| `js/errorTrap.js` | Classic script: pre-module error trap → telemetry (must run before modules). |
+| `js/helpTooltips.js` | Long-press button help tooltips + user guide wiring (module). |
+| `js/swRegister.js` | Service-worker registration (module). |
+| `js/pwaInstall.js` | One-click desktop/mobile PWA install flow (module). |
 | `data/error-logger.js` | `globalErrorLogger` — error tracking & analysis |
+| `config/continuity.toml` | Foundation config: identity, channels, orchestration, policy flags |
 | `css/style.css` | Gold/black head-shop aesthetic, neon green 7-seg display |
 | `sw.js` | Cache-first service worker |
+
+Removed in the v5 rebase (`docs/legacy/DEAD-CODE-2026-10-08.md`): sensors.js,
+vibrationHammer.js, genericSensors.js, precisionEngine.js, ultraPrecision.js,
+mlCalibration.js, advancedFusion.js, environmentalSensors.js, quantumFusion.js,
+thermalCompensation.js, advancedVerification.js, adaptiveFilter.js,
+predictiveCalibration.js, learningEngine.js — unimported, nothing referenced them.
 
 ---
 
@@ -110,7 +111,7 @@ m_added = m_phone × ((f_empty/f_loaded)² − 1)
 
 | Method | Search Range | Resolution |
 |--------|-------------|------------|
-| VibrationHammer | 1–28 Hz | ~0.1 Hz/bin |
+| Vibration motor (built-in) | 1–28 Hz | ~0.1 Hz/bin |
 | AudioAnalyzer | 20–1200 Hz | ~2.7 Hz/bin |
 | CameraSensor | 0.5–20 Hz | ~0.117 Hz/bin |
 
@@ -128,19 +129,10 @@ Measured by calibration sensitivity:
 
 ## Sensor Fusion Weights
 
-| Sensor | Weight | Notes |
-|--------|--------|-------|
-| Accelerometer (accel) | 1.0 | Primary detection |
-| Vibration Hammer | 0.9 | Resonance frequency |
-| Audio FFT | 0.8 | Microphone analysis |
-| Gyroscope | 0.75 | Tilt-based mass |
-| Camera Optical Flow | 0.60 | Visual vibration |
-| Touch Force | 0.35 | Contact pressure |
-| Magnetometer | 0.30 | Metal detection |
-| Frequency Consensus | 0.95 | Cross-sensor agreement |
-| Passive Resonance | 0.50 | Ambient FFT |
-| Particle Filter | 0.92 | Non-Gaussian fusion |
-| Neural Network | 0.85 | ML-corrected estimate |
+The v5 rebase deleted the multi-sensor weighted ensemble (nothing imported
+it, and its Neural Network / Particle Filter rows were unverifiable).
+The live chain weights the accelerometer path at 1.0; `BackgroundSensorFusion`
+validators only modulate displayed CONFIDENCE — they never add or invent grams.
 
 ---
 
@@ -283,101 +275,62 @@ cat .vercel/project.json  # Get ORG_ID and PROJECT_ID
 
 ---
 
-## Neural Network Architecture
+## Removed ML / Fusion Subsystems (v5 rebase)
 
-**WeightCorrectorNN** in `js/mlCalibration.js`:
+The neural-network corrector (`js/mlCalibration.js`), particle-filter
+fusion engine (`js/advancedFusion.js`), and crowd-sourced learning engine
+(`js/learningEngine.js`) were deleted in the v5 foundation rebase: nothing
+imported them, and accuracy claims built on unverifiable models violated
+the evidence-only policy. What they did and why they were removed:
+`docs/legacy/DEAD-CODE-2026-10-08.md`. The live signal chain (above) is
+deliberately simple: tilt-delta → calibration curve → median/Kalman →
+Verification Ledger.
 
-```
-Input (12) → Hidden1 (24) → Hidden2 (16) → Output (1)
-```
-
-### Input Features
-1. accelGrams / 100
-2. audioGrams / 100
-3. hammerGrams / 100
-4. gyroGrams / 100
-5. touchGrams / 100
-6. cameraGrams / 100
-7. fusionConfidence
-8. stability
-9. surfaceQuality (encoded: excellent=1, good=0.75, ok=0.5, poor=0.25)
-10. timeSinceCalibration / 1 day
-11. batteryLevel
-12. temperature / 50
-
-Training: Online learning from verified measurements. Requires 5+ samples to activate.
-
----
-
-## Particle Filter Fusion
-
-**AdvancedFusionEngine** in `js/advancedFusion.js`:
-
-- **Particles**: 500 for non-Gaussian distributions
-- **Resampling**: Systematic resampling when Neff < N/2
-- **Advantage**: Handles outliers better than Kalman filter
-
-### Fusion Methods
-1. Particle filter estimate
-2. Consensus of agreeing sensors (15% threshold)
-3. Reliability-weighted average
-
-Final estimate weighted by confidence of each method.
-
----
-
-## Error Logging & Self-Learning
-
-**globalErrorLogger** in `data/error-logger.js`:
-
-- Local per-device error pattern tracking
-- Anonymous cloud aggregation (optional)
-- Non-linearity detection across weight ranges
-- Auto-generated calibration recommendations
-
-### Recommendations Generated
-1. Sensitivity adjustment (systematic bias detection)
-2. Surface improvement (high variance)
-3. Non-linearity detection (quadratic calibration suggestion)
-
----
+`data/error-logger.js` (`globalErrorLogger`) still exists and still does
+local error-pattern tracking; its cloud aggregation and auto-generated
+calibration recommendations were part of the removed learning engine.
 
 ## File Structure
 
 ```
 phoneway/
-├── index.html              # Main PWA entry
+├── index.html              # Main PWA entry (all JS now external)
 ├── manifest.json           # PWA manifest
 ├── sw.js                   # Service worker
 ├── vercel.json             # Deployment config
-├── AGENTS.md               # Agent context (this project)
-├── CLAUDE.md               # This file
+├── config/
+│   └── continuity.toml     # Foundation config (identity, channels, policy)
+├── skills/                 # Agent-facing contracts (calibrate/verify/diagnose/extend-channel)
+├── test/                   # vitest: scaleMath + verificationLedger
+├── scripts/
+│   ├── serve.mjs           # Local static server
+│   └── check-static.mjs    # CI integrity gate
+├── docs/
+│   └── legacy/DEAD-CODE-2026-10-08.md  # What the rebase removed and why
 ├── css/
 │   ├── style.css           # Main styles (imports premium)
 │   └── premium-style.css   # Laboratory scale aesthetic
 ├── js/
 │   ├── app.js              # Main application class
-│   ├── sensors.js          # Core sensor management
+│   ├── simpleScale.js      # Live tilt→grams measurement path
+│   ├── verificationLedger.js # Honesty engine (only source of ±Xg claims)
+│   ├── scaleMath.js        # Calibration math primitives
 │   ├── kalman.js           # Filter algorithms
-│   ├── audio.js            # Audio resonance
-│   ├── vibrationHammer.js  # Vibration excitation
-│   ├── genericSensors.js   # Generic Sensor API
-│   ├── cameraSensor.js     # Optical flow
+│   ├── backgroundFusion.js # Passive motion validators
+│   ├── sensorCombinations.js # Cross-sensor algorithms
+│   ├── audio.js            # Audio resonance (cross-check)
+│   ├── cameraSensor.js     # Optical flow (cross-check)
+│   ├── deviceCompat.js     # iOS/Android capability handling
 │   ├── display.js          # 7-segment rendering
 │   ├── referenceWeights.js # Known-weight database
-│   ├── mlCalibration.js    # Neural network
-│   ├── advancedFusion.js   # Particle filter fusion
-│   ├── ultraPrecision.js   # 0.1g measurement engine
-│   ├── environmentalSensors.js # Barometer, battery
-│   ├── sensorCombinations.js   # Cross-sensor algorithms
-│   ├── precisionEngine.js      # Precision measurement
-│   ├── adaptiveFilter.js       # Signal processing
-│   ├── predictiveCalibration.js # ML calibration
-│   ├── quantumFusion.js        # Quantum-inspired
-│   ├── thermalCompensation.js  # Temperature drift
-│   ├── advancedVerification.js # NIST references
-│   ├── learningEngine.js       # Crowd-sourced learning
-│   └── telemetry.js            # Analytics
+│   ├── telemetry.js        # Anonymous capability reporting
+│   ├── liveUi.js           # Toasts & dynamic panels
+│   ├── version.js          # VERSION (single source)
+│   ├── versionCheck.js     # Classic script: update check
+│   ├── errorTrap.js        # Classic script: pre-module error trap
+│   ├── helpTooltips.js     # Button help + guide wiring
+│   ├── swRegister.js       # Service-worker registration
+│   └── pwaInstall.js       # PWA install flow
 └── data/
     └── error-logger.js     # Error tracking
 ```
@@ -391,7 +344,7 @@ phoneway/
 2. Add **US Dollar Bill (1.00g)** as second point for 2-point calibration
 3. Place phone on **soft surface** (mouse pad, notebook)
 4. Wait for **thermal equilibrium** (5 min after charging)
-5. Complete **5+ verified measurements** to train ML model
+5. Complete **3+ verifies** with the VERIFY button — the ledger turns them into your measured ±Xg claim
 
 ### Verification Objects
 | Object | Weight | Tolerance |

@@ -12,7 +12,8 @@
  *  3. MASS ESTIMATION: same resonance formula as audio + hammer:
  *       m_added = m_phone × ((f_baseline / f_loaded)² − 1)
  *
- *  4. HAMMER SYNC: When VibrationHammer fires, app.js calls
+ *  4. HAMMER SYNC: (vibrationHammer module removed in v5 rebase —
+ *     these sync methods remain harmless no-ops unless called.) When fired, app calls
  *     beginHammerCapture() / endHammerCapture() to analyse ONLY the
  *     vibration window — much higher SNR than passive monitoring.
  *     This is the camera+vibration "sonar" combination.
