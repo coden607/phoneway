@@ -6,4 +6,4 @@
  * manifest.json) carry their own copy — CI (scripts/check-static.mjs)
  * verifies they all agree. Bump everywhere on release.
  */
-export const VERSION = '5.0.0';
+export const VERSION = '5.1.0';

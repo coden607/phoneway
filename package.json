@@ -1,6 +1,6 @@
 {
   "name": "phoneway",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Honest tilt-based scale PWA. Resolution 0.1g — accuracy = your verification ledger. Zero-dependency vanilla ES modules, no build step.",
   "type": "module",
   "scripts": {
