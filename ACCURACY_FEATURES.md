@@ -1,6 +1,11 @@
 # Phoneway v3.0 — Ultra-Precision Features
 
-## Target Accuracy: ±0.1g (0.05g 1σ)
+## Display Resolution: 0.1g — Measured Accuracy = Your Verification Ledger
+
+> Honest note (foundation v5): 0.1g is display resolution, not guaranteed accuracy.
+> Tilt-based measurement on a phone typically achieves ±0.2–0.5g depending on device,
+> surface, and calibration. Your on-device Verification Ledger is the only source of truth
+> for what THIS device can do. Grades below reflect measured error bands, not promises.
 
 ---
 
@@ -265,4 +270,4 @@ Planned features for v3.1:
 
 **Created**: 2026-02-28  
 **Version**: 3.0 Ultra-Precision  
-**Target**: ±0.1g accuracy through machine learning
+**Reality**: no ML claim ships without on-device evidence in the Verification Ledger.
