@@ -176,8 +176,15 @@ class SimpleScale {
     if (e.beta == null && e.gamma == null) return;
     this.orientBeta = e.beta || 0;
     this.orientGamma = e.gamma || 0;
-    const tilt = Math.hypot(this.orientBeta, this.orientGamma);
-    this.comboFusion.mark('orientation', tilt / 90, 0.15);
+    // FUSION-UNITS FIX (2026-10-08): orientation beta/gamma are TILT ANGLES in
+    // DEGREES, while every other comboFusion channel carries acceleration
+    // deltas in m/s². Feeding tilt/90 (a unitless 0..~1 normalization) into
+    // the weighted average in fusedDelta() injected ~28% of a unitless
+    // quantity into the m/s² gravity signal, systematically contaminating
+    // every reading. Orientation is now tracked as state only; it is NOT a
+    // weight-bearing fusion channel. To use it legitimately, first convert
+    // tilt → projected-gravity delta (m/s²) via TiltCorrector — see
+    // skills/diagnose/SKILL.md.
     this.activeSensorCount = this.comboFusion.activeCount();
   }
 
