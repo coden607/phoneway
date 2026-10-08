@@ -1,19 +1,17 @@
 /**
- * app.js — Phoneway Ultra-Precision Scale v4.1.2
+ * app.js — Phoneway Scale v5.0 (Foundation Rebase)
  * 
- * Enhanced with:
- * - Multi-point calibration
- * - Reference weight verification
- * - Precision measurement mode
- * - Statistical accuracy analysis
- * - Cross-device compatibility layer
- * - Robust error handling
- * 
- * Target accuracy: ±0.2-0.5g with proper calibration
+ * Honest tilt-based scale: resolution 0.1g, accuracy = your verification
+ * ledger (js/verificationLedger.js). Foundation layer: config/continuity.toml
+ * + skills/. Zero-dependency vanilla ES modules, no build step.
  */
 
 'use strict';
 
+import './helpTooltips.js';
+import './swRegister.js';
+import './pwaInstall.js';
+import { VERSION as APP_VERSION } from './version.js';
 import { SimpleScale, MovingAverage } from './simpleScale.js';
 import { BackgroundSensorFusion } from './backgroundFusion.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
@@ -39,8 +37,6 @@ const UNITS = [
   { key: 'g',  label: 'g',  factor: 1,        places: 2 },
   { key: 'oz', label: 'oz', factor: 0.035274, places: 3 },
 ];
-
-const APP_VERSION = '4.1.2';
 
 class PhonewayApp {
   constructor() {
@@ -963,7 +959,7 @@ class PhonewayApp {
       this._setState('STABLE');
       
       const accuracy = (result.confidence * 100).toFixed(1);
-      const tier = result.precisionTier === "0.05g" ? "0.05g VERIFIED" : result.precisionTier === "0.1g" ? "0.1g VERIFIED" : result.precisionTier === "0.2g" ? "0.2g" : "coarse";
+      const tier = result.precisionTier === "0.05g" ? "0.05g σ" : result.precisionTier === "0.1g" ? "0.1g σ" : result.precisionTier === "0.2g" ? "0.2g σ" : "coarse";
       this._showToast(
         "Result: " + result.grams.toFixed(2) + "g (" + tier + ", σ=" + result.stdDev.toFixed(3) + "g, " + accuracy + "% conf)",
         5000

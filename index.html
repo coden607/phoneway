@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title"            content="Phoneway"/>
   <meta name="theme-color"                           content="#00d4ff"/>
-  <title>Phoneway v4.1 — Ultra-Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=4.1.0"/>
+  <title>Phoneway v5.0 — Tilt-Based Scale</title>
+  <link rel="manifest"          href="manifest.json?v=5.0.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=4.3.0"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.0.0"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,22 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script>
-// Version check and auto-update
-const APP_VERSION = '4.3.0';
-const storedVersion = localStorage.getItem('phoneway_version');
-if (storedVersion && storedVersion !== APP_VERSION) {
-  if ('caches' in window) {
-    caches.keys().then(keys => {
-      keys.forEach(key => caches.delete(key));
-    });
-  }
-  localStorage.setItem('phoneway_version', APP_VERSION);
-  console.log('[Phoneway] Updated to version', APP_VERSION);
-} else if (!storedVersion) {
-  localStorage.setItem('phoneway_version', APP_VERSION);
-}
-</script>
+<script src="js/versionCheck.js?v=5.0.0"></script>
 </head>
 <body>
 
@@ -694,58 +679,8 @@ if (storedVersion && storedVersion !== APP_VERSION) {
   </div>
 </div>
 
-<!-- ── Pre-module error trap (catches ES module load failures) ── -->
-<script>
-(function() {
-  // ── Auto-report: send error to server immediately, no module needed ──
-  function _report(msg, src, line, col) {
-    try {
-      var ua  = navigator.userAgent;
-      var dc  = /Android/i.test(ua) ? 'android' : /iPhone|iPad|iPod/i.test(ua) ? 'ios' : 'desktop';
-      var clean = {
-        msg:  String(msg || '').slice(0, 150).replace(/https?:\/\/\S+/g, '[url]'),
-        src:  String(src || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
-        line: Number(line) || 0,
-        col:  Number(col)  || 0,
-        v:    '3.7'
-      };
-      fetch('/api/telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceClass: dc, events: [{ type: 'js_error', data: clean, timestamp: Date.now() }] }),
-        keepalive: true
-      }).catch(function(){});
-    } catch(e) {}
-  }
-
-  // ── Visible overlay so you can see errors directly on the phone ──
-  function showErr(msg, src, line) {
-    var d = document.createElement('div');
-    d.style.cssText = 'position:fixed;inset:0;background:#1a0000;z-index:99999;padding:20px;overflow:auto;font-family:monospace;font-size:13px;color:#ff6666;';
-    d.innerHTML = '<b style="font-size:16px">❌ LOAD ERROR</b><br><br>'
-      + '<b>Message:</b><br>' + String(msg) + '<br><br>'
-      + '<b>File:</b> ' + (src || '') + (line ? ':' + line : '') + '<br><br>'
-      + '<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + String(msg).replace(/'/g,"\\'") + '\').then(function(){alert(\'Copied!\')})" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;margin-right:8px">📋 COPY</button>'
-      + '<button onclick="location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer">↻ RELOAD APP</button>';
-    document.body.appendChild(d);
-  }
-
-  window.onerror = function(msg, src, line, col, err) {
-    _report(msg, src, line, col);
-    showErr((err && err.stack) ? err.stack : msg, src, line);
-    return true;
-  };
-  window.onunhandledrejection = function(e) {
-    var r = e.reason;
-    var m = (r && r.message) ? r.message : String(r);
-    var s = (r && r.fileName)  ? r.fileName  : '';
-    var l = (r && r.lineNumber) ? r.lineNumber : 0;
-    _report(m, s, l, 0);
-    showErr((r && r.stack) ? r.stack : m, s, l);
-    return true;
-  };
-})();
-</script>
+<!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
+<script src="js/errorTrap.js?v=5.0.0"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -821,23 +756,25 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 
     <!-- Accuracy grades -->
     <div class="guide-section">
-      <div class="guide-section-title">ACCURACY GRADES & PRECISION ESTIMATES</div>
+      <div class="guide-section-title">MEASURED ACCURACY — YOUR VERIFICATION LEDGER</div>
+      <div style="background:#111;padding:10px;border-radius:6px;line-height:1.8;margin-bottom:8px">
+        The only honest accuracy number is <strong style="color:#39ff14">measured</strong>: weigh known reference weights with VERIFY, and the app records each error. Your displayed claim = the <strong style="color:#39ff14">worst error of your last 5 verifies</strong>, rounded up to 0.1g. <strong style="color:#e8c84a">Typically ±0.5g</strong> on a good surface — ±0.1g is possible on one device/surface right after multi-point calibration, but it must be <em>demonstrated</em>, never assumed.
+      </div>
       <table class="guide-table">
-        <tr><td style="color:#00ff66;font-weight:bold">A+</td><td>±0.1g</td><td>Lab quality — 3+ cal points, excellent surface</td></tr>
-        <tr><td style="color:#39ff14;font-weight:bold">A</td> <td>±0.2g</td><td>Target — 2 cal points, good surface</td></tr>
-        <tr><td style="color:#e8c84a;font-weight:bold">B</td> <td>±0.3g</td><td>Very good — 1 cal point, good surface</td></tr>
-        <tr><td style="color:#ffcc00;font-weight:bold">C</td> <td>±0.5g</td><td>Good — add more calibration points</td></tr>
-        <tr><td style="color:#ff8c00;font-weight:bold">D</td> <td>±1g</td>  <td>Recalibrate on a softer surface</td></tr>
-        <tr><td style="color:#555">UNCAL</td>                 <td>±2g+</td> <td>No calibration — results unreliable</td></tr>
+        <tr><td style="color:#00ff66;font-weight:bold">DEMONSTRATED</td><td>worst verify ≤0.1g</td><td>0.1g performance verified on THIS device + surface</td></tr>
+        <tr><td style="color:#39ff14;font-weight:bold">±0.2g</td><td>worst verify ≤0.2g</td><td>Excellent — 3+ cal points, excellent surface</td></tr>
+        <tr><td style="color:#e8c84a;font-weight:bold">±0.5g</td><td>worst verify ≤0.5g</td><td>Typical — 1–2 cal points, decent surface</td></tr>
+        <tr><td style="color:#ff8c00;font-weight:bold">>±0.5g</td><td>worst verify >0.5g</td><td>Softer surface, more cal points, then re-verify</td></tr>
+        <tr><td style="color:#555">UNVERIFIED</td><td>no verifies yet</td><td>Calibrate, then VERIFY known weights — until then we don't claim a number</td></tr>
       </table>
     </div>
 
     <!-- Accuracy %% explanation -->
     <div class="guide-section">
-      <div class="guide-section-title">WHAT THE ACCURACY % MEANS</div>
+      <div class="guide-section-title">WHAT THE DISPLAY SHOWS</div>
       <div style="background:#111;padding:10px;border-radius:6px;line-height:1.8">
         The <strong style="color:#e8c84a">%</strong> is a real-time <strong style="color:#e8c84a">signal quality score</strong> — it rises when you are calibrated and the phone is perfectly still, and drops when the phone moves or is uncalibrated.<br><br>
-        The <strong style="color:#39ff14">~±Xg</strong> label under the bar is the <strong style="color:#39ff14">precision estimate</strong> — the realistic gram-accuracy you can expect based on your calibration quality and surface. This is the number that really matters.
+        The <strong style="color:#39ff14">±Xg</strong> label under the bar is your <strong style="color:#39ff14">measured accuracy claim</strong> from the Verification Ledger — the worst |error| of your last 5 verifies, rounded up. <strong style="color:#e8c84a">Resolution is 0.1g (display rounding); accuracy is whatever your ledger measures.</strong>
       </div>
     </div>
 
@@ -868,398 +805,11 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 </div>
 
 
-<!-- ── Tooltip + Guide JS ────────────────────────────────── -->
-<script>
-(function() {
-'use strict';
-
-/* ── Button help data ──────────────────────────────────── */
-var BTN_HELP = {
-  btnTare: {
-    icon:'⚖️', title:'TARE / ZERO',
-    desc:'Sets the zero point. Press with NOTHING on the phone so the display reads 0g. During calibration: place your known weight FIRST, then press TARE to register that weight.',
-    tips:['Hold phone perfectly still for ~2 s after pressing','CAL MODE: place known weight → press TARE','Re-tare if display drifts upward on an empty scale','The scale takes 100 sensor samples for its baseline — wait 2s'],
-    accuracy:'Critical — quality tare = accurate zero baseline'
-  },
-  btnMode: {
-    icon:'🔄', title:'MEASUREMENT MODE',
-    desc:'Cycles through modes: ACCEL (real-time accelerometer), PRECISION (5-second statistical average), STATISTICS (detailed readout).',
-    tips:['ACCEL — fastest, good for most weights','PRECISION — averages 5 s, most accurate single reading','STATISTICS — shows standard deviation σ and min/max'],
-    accuracy:'PRECISION mode is best for a single critical reading'
-  },
-  btnUnits: {
-    icon:'📏', title:'UNITS',
-    desc:'Switches the display between grams (g) and ounces (oz). Calibration is stored in grams internally.',
-    tips:['g = grams (default)','oz = ounces  (1 oz = 28.35 g)'],
-    accuracy:null
-  },
-  btnPower: {
-    icon:'⚡', title:'POWER ON / OFF',
-    desc:'Turns the scale on and off. When powered on the scale auto-tares. Powering off and on resets the baseline — useful if the display has drifted.',
-    tips:['Power off when not in use to conserve battery','If display drifts significantly, power-cycle to re-tare','Thermal stability is best in the first few minutes after power-on'],
-    accuracy:null
-  },
-  btnHold: {
-    icon:'⏸', title:'HOLD / FREEZE DISPLAY',
-    desc:'Freezes the current reading on screen so you can remove the object and read the weight at your leisure.',
-    tips:['Wait for STABLE (STB LED green) before pressing HOLD','Press HOLD again to release the frozen reading','Combine with PRECISION mode for most accurate frozen result'],
-    accuracy:'Always wait for STABLE indicator before freezing'
-  },
-  btnCal: {
-    icon:'🎯', title:'CALIBRATE',
-    desc:'Opens the calibration wizard. A known-weight object teaches the scale how your specific phone and surface deflect. This is the single most important step for accuracy.',
-    tips:[
-      'Best combo: nickel (5.000g) + dollar bill (1.00g) for 2-point cal',
-      'Phone on mouse pad or 5+ layers of cloth — NOT hard table',
-      'Wait 5 min after unplugging charger before calibrating',
-      'Each additional cal point improves the curve fit',
-      'Recalibrate if you change surfaces or move to a new location'
-    ],
-    accuracy:'MOST IMPORTANT STEP — wrong cal = wrong readings no matter what'
-  },
-  btnVerify: {
-    icon:'✓', title:'VERIFY ACCURACY',
-    desc:'Measures a known reference weight and shows you the exact error in grams and percent. Also trains the internal accuracy engine.',
-    tips:['Nickel: 5.000g ±0.008g — best verifier','Penny: 2.500g ±0.013g','Quarter: 5.670g ±0.013g','Dollar bill: 1.00g ±0.03g','Do 3+ verifications to unlock maximum accuracy'],
-    accuracy:'Run after every recalibration to track real-world accuracy'
-  },
-  btnHammer: {
-    icon:'🔨', title:'VIBRATION ANALYSIS',
-    desc:'Triggers vibration-based resonance measurement. The phone vibrates and analyzes how the added weight shifts its resonant frequency — a physics-based cross-check of the accelerometer reading.',
-    tips:['Works best on a harder, flatter surface (opposite of accelerometer)','Use as a cross-check when accelerometer reading seems off','Requires vibration/haptics enabled on your device'],
-    accuracy:'Secondary sensor — cross-checks the primary accelerometer'
-  },
-  btnPrecision: {
-    icon:'🎯', title:'0.1g PRECISION MODE',
-    desc:'Takes a 5-second statistical measurement: collects many readings, rejects outliers, and returns the trimmed mean with a standard deviation σ. Best possible single-shot result.',
-    tips:[
-      'Keep phone COMPLETELY still for the full 5 seconds',
-      'Only meaningful after full calibration',
-      'The σ value in the result shows how stable your surface is',
-      'Place phone on dense foam for lowest σ'
-    ],
-    accuracy:'Highest accuracy mode — use for critical measurements'
-  },
-  btnLight: {
-    icon:'💡', title:'BACKLIGHT',
-    desc:'Toggles high-contrast display mode for low-light conditions.',
-    tips:['No effect on measurement accuracy'],
-    accuracy:null
-  },
-  btnStats: {
-    icon:'📊', title:'ACCURACY REPORT',
-    desc:'Full calibration audit: grade, precision estimate, systematic error, verification history, environmental status, and specific improvement recommendations.',
-    tips:[
-      'Grade A+ = ±0.1g · A = ±0.2g · B = ±0.3g · C = ±0.5g · D = ±1g',
-      'Check RECOMMENDATIONS section for actionable tips',
-      'Export saves full calibration data as JSON for debugging',
-      'Tap the ACCURACY display in the header for the full setup guide'
-    ],
-    accuracy:'Check after every recalibration'
-  }
-};
-
-/* ── Show / hide tooltip ───────────────────────────────── */
-function showTip(id) {
-  var d = BTN_HELP[id];
-  if (!d) return;
-  document.getElementById('tipIcon').textContent  = d.icon;
-  document.getElementById('tipTitle').textContent = d.title;
-  document.getElementById('tipDesc').textContent  = d.desc;
-  var ul = document.getElementById('tipList');
-  ul.innerHTML = (d.tips||[]).map(function(t){ return '<li>'+t+'</li>'; }).join('');
-  var ae = document.getElementById('tipAccuracy');
-  if (d.accuracy) { ae.textContent = '⚡ '+d.accuracy; ae.style.display='block'; }
-  else            { ae.style.display='none'; }
-  document.getElementById('btnTooltip').style.display = 'flex';
-  if (navigator.vibrate) navigator.vibrate(30);
-}
-function hideTip() {
-  document.getElementById('btnTooltip').style.display = 'none';
-}
-window._showBtnTip = showTip;
-window._hideBtnTip = hideTip;
-
-/* ── Attach long-press to every button that has help data ─ */
-var tipTimer = null;
-Object.keys(BTN_HELP).forEach(function(id) {
-  var btn = document.getElementById(id);
-  if (!btn) return;
-
-  function arm() {
-    if (tipTimer) clearTimeout(tipTimer);
-    tipTimer = setTimeout(function(){ tipTimer=null; showTip(id); }, 500);
-  }
-  function disarm() {
-    if (tipTimer) { clearTimeout(tipTimer); tipTimer=null; }
-  }
-
-  btn.addEventListener('touchstart',  arm,    { passive:true });
-  btn.addEventListener('touchend',    disarm, { passive:true });
-  btn.addEventListener('touchmove',   disarm, { passive:true });
-  btn.addEventListener('touchcancel', disarm, { passive:true });
-  btn.addEventListener('mousedown',   arm);
-  btn.addEventListener('mouseup',     disarm);
-  btn.addEventListener('mouseleave',  disarm);
-});
-
-/* ── Close tooltip ─────────────────────────────────────── */
-document.getElementById('btnTooltip').addEventListener('click', hideTip);
-var tc = document.getElementById('tipClose');
-if (tc) tc.addEventListener('click', function(e){ e.stopPropagation(); hideTip(); });
-
-/* ── Accuracy block → open guide ──────────────────────── */
-function openGuide() {
-  var g = document.getElementById('guideOverlay');
-  if (!g) return;
-  g.style.display = 'block';
-  setTimeout(function(){ g.classList.add('show'); }, 10);
-}
-function closeGuide() {
-  var g = document.getElementById('guideOverlay');
-  if (!g) return;
-  g.classList.remove('show');
-  setTimeout(function(){ g.style.display='none'; }, 300);
-}
-
-var ab = document.getElementById('accuracyBlock');
-if (ab) ab.addEventListener('click', openGuide);
-
-var gc  = document.getElementById('guideClose');
-var gcb = document.getElementById('guideCloseBtn');
-if (gc)  gc.addEventListener('click',  closeGuide);
-if (gcb) gcb.addEventListener('click', closeGuide);
-
-})();
-</script>
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=4.3.0"></script>
+<script type="module" src="js/app.js?v=5.0.0"></script>
 
-<!-- Service Worker Registration -->
-<script>
-(function() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js?v=4.3.0')
-        .then(function(registration) {
-          console.log('[SW] Registered:', registration.scope);
-          
-          // Check for updates
-          registration.addEventListener('updatefound', function() {
-            const newWorker = registration.installing;
-            newWorker.addEventListener('statechange', function() {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[SW] New version available');
-                // Show update notification
-                if (confirm('New version available! Reload to update?')) {
-                  window.location.reload();
-                }
-              }
-            });
-          });
-        })
-        .catch(function(error) {
-          console.log('[SW] Registration failed:', error);
-        });
-    });
-  }
-})();
-</script>
 
-<script>
-/* ═══════════════════════════════════════════════════════════════
-   PWA INSTALL — One-Click Desktop & Mobile Installation
-═══════════════════════════════════════════════════════════════ */
-let _dip = null;
-let _isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-// Detect platform and update install text
-const _platform = (() => {
-  if (/Windows/i.test(navigator.userAgent)) return 'windows';
-  if (/Mac/i.test(navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent)) return 'mac';
-  if (/Linux/i.test(navigator.userAgent)) return 'linux';
-  if (/Android/i.test(navigator.userAgent)) return 'android';
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'ios';
-  return 'desktop';
-})();
-
-// Update install subtitle based on platform
-const _installSub = document.getElementById('installSubText');
-if (_installSub) {
-  const _platformText = {
-    windows: 'Install on Windows — Desktop shortcut — Works offline',
-    mac: 'Install on Mac — Dock icon — Works offline',
-    linux: 'Install on Linux — Desktop entry — Works offline',
-    android: 'Add to home screen — Works offline — No app store',
-    ios: 'Add to home screen — Works offline — No app store',
-    desktop: 'One-click install — Desktop icon — Works offline'
-  };
-  _installSub.textContent = _platformText[_platform] || _platformText.desktop;
-}
-
-// Handle install prompt
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  _dip = e;
-  
-  // Show desktop modal for desktop users, banner for mobile
-  if (_isDesktop && _platform !== 'android') {
-    setTimeout(() => {
-      const modal = document.getElementById('desktopInstallModal');
-      if (modal) modal.style.display = 'flex';
-    }, 1500);
-  } else {
-    const b = document.getElementById('installBanner');
-    if (b) b.classList.add('show');
-  }
-
-  // Auto-show install banner/modal but DON'T auto-prompt (requires user gesture)
-  const shown = sessionStorage.getItem('installPromptShown');
-  if (!shown) {
-    sessionStorage.setItem('installPromptShown', '1');
-    if (_isDesktop) {
-      // Desktop: show modal after delay
-      setTimeout(() => {
-        if (!sessionStorage.getItem('installPromptAutoShown')) {
-          sessionStorage.setItem('installPromptAutoShown', '1');
-          const modal = document.getElementById('desktopInstallModal');
-          if (modal) modal.style.display = 'flex';
-        }
-      }, 8000);
-    }
-    // Mobile: banner shows automatically, user must click install
-  }
-});
-
-// Mobile banner install button - MUST be user gesture
-const installBtn = document.getElementById('installBtn');
-if (installBtn) installBtn.addEventListener('click', async () => {
-  if (!_dip) {
-    _showManualInstallInstructions();
-    return;
-  }
-  try {
-    _dip.prompt();
-    const { outcome } = await _dip.userChoice;
-    if (outcome === 'accepted') {
-      document.getElementById('installBanner').classList.remove('show');
-      if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
-      _showInstallSuccess();
-    }
-    _dip = null;
-  } catch (e) {
-    console.log('Install prompt failed:', e);
-    _showManualInstallInstructions();
-  }
-});
-
-// Desktop modal install button
-const desktopInstallBtn = document.getElementById('desktopInstallBtn');
-if (desktopInstallBtn) desktopInstallBtn.addEventListener('click', async () => {
-  if (!_dip) {
-    _showManualInstallInstructions();
-    return;
-  }
-  try {
-    _dip.prompt();
-    const { outcome } = await _dip.userChoice;
-    if (outcome === 'accepted') {
-      document.getElementById('desktopInstallModal').style.display = 'none';
-      document.getElementById('installBanner').classList.remove('show');
-      _showInstallSuccess();
-    }
-    _dip = null;
-  } catch (e) {
-    console.log('Install prompt failed:', e);
-    _showManualInstallInstructions();
-  }
-});
-
-const desktopInstallCancel = document.getElementById('desktopInstallCancel');
-if (desktopInstallCancel) desktopInstallCancel.addEventListener('click', () => {
-  document.getElementById('desktopInstallModal').style.display = 'none';
-});
-
-const installDismiss = document.getElementById('installDismiss');
-if (installDismiss) installDismiss.addEventListener('click', () => {
-  document.getElementById('installBanner').classList.remove('show');
-});
-
-// Success message
-function _showInstallSuccess() {
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = _isDesktop ? 
-      '✓ Installed! Look for Phoneway on your desktop/dock' : 
-      '✓ Installed! Check your home screen';
-    toast.className = 'toast toast-show';
-    setTimeout(() => { toast.className = 'toast'; }, 4000);
-  }
-}
-
-// Manual install instructions for unsupported browsers
-function _showManualInstallInstructions() {
-  const modal = document.getElementById('desktopInstallModal');
-  if (modal) {
-    modal.innerHTML = `
-      <div style="background:#161616; border:2px solid var(--gold); border-radius:16px; padding:32px; max-width:420px; text-align:center;">
-        <div style="font-size:48px; margin-bottom:16px;">⚙️</div>
-        <div style="font-size:18px; font-weight:bold; color:var(--gold); margin-bottom:16px;">MANUAL INSTALL</div>
-        <div style="font-size:12px; color:#888; line-height:1.8; margin-bottom:20px; text-align:left;">
-          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Chrome/Edge:</strong></p>
-          <ol style="margin-bottom:16px; padding-left:20px;">
-            <li>Click the <strong style="color:var(--gold);">⊕</strong> icon in the address bar</li>
-            <li>Click <strong style="color:var(--gold);">"Install Phoneway..."</strong></li>
-          </ol>
-          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Safari (Mac):</strong></p>
-          <ol style="padding-left:20px;">
-            <li>Click <strong style="color:var(--gold);">Share</strong> in the toolbar</li>
-            <li>Select <strong style="color:var(--gold);">"Add to Dock"</strong></li>
-          </ol>
-        </div>
-        <button onclick="document.getElementById('desktopInstallModal').style.display='none'" style="background:var(--gold); color:#000; border:none; padding:12px 32px; border-radius:8px; font-weight:bold; cursor:pointer;">GOT IT</button>
-      </div>
-    `;
-    modal.style.display = 'flex';
-  }
-}
-
-// Installed event
-window.addEventListener('appinstalled', () => {
-  var _ib = document.getElementById('installBanner');
-  if (_ib) _ib.classList.remove('show');
-  var _dm = document.getElementById('desktopInstallModal');
-  if (_dm) _dm.style.display = 'none';
-  var _ih = document.getElementById('iosHint');
-  if (_ih) _ih.remove();
-  _showInstallSuccess();
-  if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
-});
-
-// iOS Safari detection
-const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-
-if (isIos && isSafari && !isStandalone) {
-  setTimeout(() => {
-    const h = document.getElementById('iosHint');
-    if (h) h.classList.add('show');
-  }, 3500);
-}
-
-// Check if already installed (for returning users)
-if (isStandalone) {
-  // Already installed - hide all prompts
-  const installBanner = document.getElementById('installBanner');
-  if (installBanner) installBanner.remove();
-  const desktopInstallModal2 = document.getElementById('desktopInstallModal');
-  if (desktopInstallModal2) desktopInstallModal2.remove();
-  const iosHint = document.getElementById('iosHint');
-  if (iosHint) iosHint.remove();
-}
-</script>
 
 </body>
 </html>

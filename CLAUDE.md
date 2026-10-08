@@ -1,4 +1,4 @@
-# CLAUDE.md — Phoneway Ultra-Precision Scale v3.1
+# CLAUDE.md — Phoneway Tilt-Based Scale v5.0
 
 **Comprehensive guide for AI assistants working on the Phoneway codebase.**
 
@@ -6,10 +6,15 @@
 
 ## Project Overview
 
-**Phoneway** is a smartphone-based precision scale achieving **±0.1g accuracy** (0.05g 1σ in optimal conditions) through multi-sensor fusion and machine learning.
+**Phoneway** is a smartphone-based tilt scale. **Resolution 0.1g. Accuracy = your
+calibration result** — typically ±0.5g, sometimes ±0.2g, and on a good
+surface right after multi-point calibration occasionally ±0.1g — measured
+per-device by the on-device Verification Ledger (`js/verificationLedger.js`).
+Accuracy claims come ONLY from the ledger; never invent one.
 
-- **Version**: 3.1 Ultra-Precision with Self-Learning
-- **Target Accuracy**: ±0.1g (ACHIEVED)
+- **Version**: 5.0 Foundation Rebase
+- **Display Resolution**: 0.1g
+- **Measured Accuracy**: whatever the verification ledger records on this device (typically ±0.5g)
 - **Maximum Weight**: ~100-200g (phone-dependent)
 - **Minimum Weight**: ~0.1g (surface-dependent)
 - **Technology**: Vanilla JavaScript ES modules, PWA, no build step
@@ -183,15 +188,13 @@ accuracy = conf×0.40 + stability×0.35 + calScore×0.15 + surfaceScore×0.10
 
 ### Accuracy Grades
 
-| Grade | Precision | Color | Description |
-|-------|-----------|-------|-------------|
-| A+ | ±0.03g | #00ff66 | Laboratory quality |
-| A | ±0.05g | #39ff14 | Target achieved |
-| B+ | ±0.1g | #e8c84a | Excellent |
-| B | ±0.2g | #ffcc00 | Good |
-| C | ±0.5g | #ff8c00 | Fair |
-| D | >0.5g | #ff4444 | Needs calibration |
-| untested | — | #666666 | Calibrate for accuracy |
+| Grade | Meaning | Color | Description |
+|-------|---------|-------|-------------|
+| DEMONSTRATED | worst verify ≤0.1g | #00ff66 | 0.1g verified on THIS device + surface |
+| ±0.2g | worst verify ≤0.2g | #39ff14 | Excellent — 3+ cal points, excellent surface |
+| ±0.5g | worst verify ≤0.5g | #e8c84a | Typical measured accuracy |
+| >±0.5g | worst verify >0.5g | #ff8c00 | Softer surface / more cal points, re-verify |
+| UNVERIFIED | no verifies yet | #666666 | Run VERIFY before trusting a number |
 
 ---
 
@@ -421,9 +424,9 @@ phoneway/
 
 ---
 
-**Last Updated**: 2026-03-02
-**Target Accuracy**: ±0.1g (ACHIEVED)
-**Status**: Production Ready v3.1
+**Last Updated**: 2026-10-08
+**Accuracy policy**: claims are evidence-based only — see `js/verificationLedger.js`
+**Status**: Foundation v5.0 — honest scale + continuity-os core
 
 ## Shared agent skills
 
