@@ -1,10 +1,28 @@
 'use strict';
 
 import { TiltCorrector } from './sensorCombinations.js';
+class SensorComboFusion {
+  constructor(){ this.channels={}; }
+  mark(n,v,w){ this.channels[n]={value:v,weight:w,last:Date.now()}; }
+  fusedDelta(){ let n=0,d=0,now=Date.now();
+    for (const k in this.channels){ const ch=this.channels[k]; if(!ch||ch.weight<=0||k==='gyroStill') continue; if(now-ch.last>1500) continue; n+=ch.value*ch.weight; d+=ch.weight; }
+    return d?n/d:0; }
+  activeCount(){ return Object.keys(this.channels).length; }
+}
 import {
   MovingAverage, EMA, SimpleKalman,
   MultiPointCalibration, TemperatureCompensator
 } from './scaleMath.js';
+class MedianFilter {
+  constructor(size){ this.size=size%2?size:size+1; this.buffer=[]; }
+  update(v){ this.buffer.push(v); if(this.buffer.length>this.size) this.buffer.shift(); const s=this.buffer.slice().sort((a,b)=>a-b); return s[(s.length-1)>>1]; }
+  reset(){ this.buffer=[]; }
+}
+class AdaptiveKalman {
+  constructor({R=0.08,Q=0.004}={}){ this.R0=R; this.Q0=Q; this.P=1; this.x=null; }
+  update(z,motion){ const m=Math.max(0,Math.min(1,motion==null?0:motion)); const Q=this.Q0*(1+8*m); const R=this.R0*(1+3*(1-m)); if(this.x===null){ this.x=z; return z; } const Pp=this.P+Q; const K=Pp/(Pp+R); this.x=this.x+K*(z-this.x); this.P=(1-K)*Pp; return this.x; }
+  reset(){ this.x=null; this.P=1; }
+}
 
 class SimpleScale {
   constructor() {
@@ -17,6 +35,12 @@ class SimpleScale {
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
     this.tiltCorrector = new TiltCorrector();
+    this.comboFusion = new SensorComboFusion();
+    this.linearAccel = { x: 0, y: 0, z: 0 };
+    this.gyroRate = 0;
+    this.orientBeta = 0;
+    this.orientGamma = 0;
+    this.activeSensorCount = 1;
     this.rawAccel = { x: 0, y: 0, z: 9.8 };
     this.filteredAccel = { x: 0, y: 0, z: 9.8 };
     this.rawWeight = 0;
@@ -28,12 +52,16 @@ class SimpleScale {
     this.gravityQuality = 0;
     this.maDx = new MovingAverage(80);
     this.maDy = new MovingAverage(80);
+    this.medX = new MedianFilter(5);
+    this.medY = new MedianFilter(5);
+    this.medZ = new MedianFilter(5);
     this.kalmanX = new SimpleKalman({ R: 0.002, Q: 0.0002 });
     this.kalmanY = new SimpleKalman({ R: 0.002, Q: 0.0002 });
     this.kalmanZ = new SimpleKalman({ R: 0.005, Q: 0.0005 });
+    this.weightKalman = new AdaptiveKalman({ R: 0.06, Q: 0.003 });
     this.emaWeight = new EMA(0.08);
     this.stabilityCheck = new MovingAverage(60);
-    this.deadbandThreshold = 0.08;
+    this.deadbandThreshold = 0.04;
     this.lastDisplayValue = 0;
     this.stableCounter = 0;
     this._tare_in_progress = false;
@@ -66,7 +94,9 @@ class SimpleScale {
   start() {
     if (this.active) return;
     this._handler = (e) => this._handleMotion(e);
+    this._orientHandler = (e) => this._handleOrient(e);
     window.addEventListener('devicemotion', this._handler, { passive: true });
+    window.addEventListener('deviceorientation', this._orientHandler, { passive: true });
     this.active = true;
     this.baseline = null;
     if (this._startTareTimer) clearTimeout(this._startTareTimer);
@@ -79,6 +109,7 @@ class SimpleScale {
   stop() {
     if (!this.active) return;
     window.removeEventListener('devicemotion', this._handler);
+    window.removeEventListener('deviceorientation', this._orientHandler);
     this.active = false;
     if (this._startTareTimer) { clearTimeout(this._startTareTimer); this._startTareTimer = null; }
     this._tare_in_progress = false;
@@ -96,15 +127,23 @@ class SimpleScale {
     this.rawAccel = { x, y, z };
     if (this.onRaw) this.onRaw(x, y, z);
     this.filteredAccel = {
-      x: this.kalmanX.update(x),
-      y: this.kalmanY.update(y),
-      z: this.kalmanZ.update(z)
+      x: this.kalmanX.update(this.medX.update(x)),
+      y: this.kalmanY.update(this.medY.update(y)),
+      z: this.kalmanZ.update(this.medZ.update(z))
     };
     this.tiltCorrector.feedGravity(this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z);
+    const lin = e.acceleration;
+    if (lin && (lin.x != null || lin.y != null || lin.z != null)) {
+      this.linearAccel = { x: lin.x || 0, y: lin.y || 0, z: lin.z || 0 };
+      const linH = Math.hypot(this.linearAccel.x, this.linearAccel.y);
+      this.comboFusion.mark('linear', linH, 0.35);
+    }
     const jerk = Math.hypot(x - this.filteredAccel.x, y - this.filteredAccel.y, z - this.filteredAccel.z);
     const rotationRate = e.rotationRate
       ? Math.hypot(e.rotationRate.alpha || 0, e.rotationRate.beta || 0, e.rotationRate.gamma || 0)
       : 0;
+    this.gyroRate = rotationRate;
+    this.comboFusion.mark('gyroStill', Math.max(0, 1 - rotationRate / 40), 0.25);
     const gravityMagnitude = Math.hypot(this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z);
     const gravityError = Math.abs(gravityMagnitude - 9.80665);
     this.gravityQuality = gravityMagnitude > 1 ? Math.max(0, 1 - gravityError / 0.5) : 0;
@@ -133,6 +172,15 @@ class SimpleScale {
     this._process();
   }
 
+  _handleOrient(e) {
+    if (e.beta == null && e.gamma == null) return;
+    this.orientBeta = e.beta || 0;
+    this.orientGamma = e.gamma || 0;
+    const tilt = Math.hypot(this.orientBeta, this.orientGamma);
+    this.comboFusion.mark('orientation', tilt / 90, 0.15);
+    this.activeSensorCount = this.comboFusion.activeCount();
+  }
+
   _process() {
     if (!this.baseline) return;
     if (this.motionBlocked) {
@@ -146,23 +194,33 @@ class SimpleScale {
     const dy = this.filteredAccel.y - this.baseline.y;
     const avgDx = this.maDx.update(dx);
     const avgDy = this.maDy.update(dy);
-    const deltaHorizontal = Math.sqrt(avgDx * avgDx + avgDy * avgDy);
+    const planeDelta = this.tiltCorrector.horizontalDelta(
+      this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z,
+      this.baseline.x, this.baseline.y, this.baseline.z
+    );
+    this.comboFusion.mark('gravity', planeDelta, 1.0);
+    const fusedDelta = this.comboFusion.fusedDelta();
+    const deltaHorizontal = fusedDelta > 0
+      ? 0.72 * Math.sqrt(avgDx * avgDx + avgDy * avgDy) + 0.28 * fusedDelta
+      : Math.sqrt(avgDx * avgDx + avgDy * avgDy);
     let rawG = (this.multiCal.coeffs && this.multiCal.points.length >= 2)
       ? this.multiCal.estimate(deltaHorizontal)
       : deltaHorizontal * this.sensitivity;
     rawG = Math.max(0, this.tempComp.compensate(Math.max(0, rawG)));
+    rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
     if (rawG < 0.05) rawG = 0;
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
     const stdDev = this.stabilityCheck.stdDev;
-    const isNowStable = this.stabilityCheck.isFull && stdDev < (this.calibrated ? 0.06 : 0.08);
+    const isNowStable = this.stabilityCheck.isFull && stdDev < (this.calibrated ? 0.05 : 0.08);
     if (isNowStable) this.stableCounter++; else this.stableCounter = 0;
     const trulyStable = this.stableCounter > (this.calibrated ? 30 : 25);
     const emaG = this.emaWeight.update(rawG);
     if (trulyStable && !this.isStable && rawG > 0.1 && this.onStable) this.onStable(emaG);
     this.isStable = trulyStable;
     if (trulyStable) {
-      this.displayWeight = this._trimmedMean(this.stabilityCheck.getAll(), 0.15);
+      const trimmed = this._trimmedMean(this.stabilityCheck.getAll(), 0.15);
+      this.displayWeight = this._toTenth(this._biasCorrect(trimmed));
       this.lastDisplayValue = this.displayWeight;
     } else if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.05) {
       this.displayWeight = emaG;
@@ -196,6 +254,8 @@ class SimpleScale {
 
   tare() {
     this.kalmanX.reset(); this.kalmanY.reset(); this.kalmanZ.reset();
+    this.medX.reset(); this.medY.reset(); this.medZ.reset();
+    this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset();
     this.stabilityCheck.reset(); this.emaWeight.reset();
     this.stableCounter = 0;
@@ -234,14 +294,48 @@ class SimpleScale {
   }
 
   _emitProgress(phase, pct, message) {
-    if (typeof this.onProgress === 'function') {
-      this.onProgress({
-        phase: phase,
-        pct: Math.max(0, Math.min(1, pct || 0)),
-        collected: this._tare_xs ? this._tare_xs.length : 0,
-        target: this._tare_target,
-        message: message || ''
-      });
+    const info = {
+      phase: phase,
+      pct: Math.max(0, Math.min(1, pct || 0)),
+      collected: this._tare_xs ? this._tare_xs.length : 0,
+      target: this._tare_target,
+      message: message || ''
+    };
+    if (typeof this.onProgress === 'function') this.onProgress(info);
+    this._paintProgressUi(info);
+  }
+
+  _paintProgressUi(info) {
+    if (typeof document === 'undefined') return;
+    if (!document.getElementById('workProgressStyle')) {
+      const style = document.createElement('style');
+      style.id = 'workProgressStyle';
+      style.textContent = '.work-progress{display:none;margin-top:8px;padding:6px 2px 2px}.work-progress.show{display:block}.work-progress-meta{display:flex;justify-content:space-between;font-size:9px;letter-spacing:1.4px;color:#c9a24a;text-transform:uppercase;margin-bottom:4px}.work-progress-track{height:6px;background:#111;border:1px solid #3a2a10;border-radius:3px;overflow:hidden}.work-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#7a5000,#e8c84a,#39ff14);transition:width .15s linear}';
+      document.head.appendChild(style);
+    }
+    let wrap = document.getElementById('workProgress');
+    if (!wrap) {
+      const host = document.getElementById('display-section') || document.body;
+      wrap = document.createElement('div');
+      wrap.id = 'workProgress';
+      wrap.className = 'work-progress show';
+      wrap.innerHTML = '<div class="work-progress-meta"><span id="workProgressLabel">Working…</span><span id="workProgressPct">0%</span></div><div class="work-progress-track"><div class="work-progress-fill" id="workProgressFill"></div></div>';
+      host.appendChild(wrap);
+    }
+    wrap.classList.add('show');
+    wrap.setAttribute('aria-hidden', 'false');
+    const fill = document.getElementById('workProgressFill');
+    const lab = document.getElementById('workProgressLabel');
+    const num = document.getElementById('workProgressPct');
+    const pct = Math.round((info.pct || 0) * 100);
+    if (fill) fill.style.width = pct + '%';
+    if (num) num.textContent = pct + '%';
+    if (lab && info.message) lab.textContent = info.message;
+    if (pct >= 100) {
+      setTimeout(function() {
+        wrap.classList.remove('show');
+        wrap.setAttribute('aria-hidden', 'true');
+      }, 400);
     }
   }
 
@@ -256,14 +350,23 @@ class SimpleScale {
     const newSensitivity = knownGrams / deltaA;
     this.sensitivity = this.calibrated ? 0.7 * newSensitivity + 0.3 * this.sensitivity : newSensitivity;
     this.calibrated = true;
+    this.emaWeight.reset();
+    this.stabilityCheck.reset();
+    this.stableCounter = 0;
+    this.displayWeight = knownGrams;
+    this.lastDisplayValue = knownGrams;
+    this.rawWeight = knownGrams;
+    this.emaWeight.update(knownGrams);
     this._saveCalibration();
     const r2 = this.multiCal.quality;
-    let estimatedAccuracy = '+/-1g (poor)';
-    if (this.sensitivity > 300 && r2 > 0.98) estimatedAccuracy = '+/-0.1g (excellent)';
-    else if (this.sensitivity > 200 && r2 > 0.95) estimatedAccuracy = '+/-0.2g (very good)';
-    else if (this.sensitivity > 120 && r2 > 0.90) estimatedAccuracy = '+/-0.3g (good)';
-    else if (this.sensitivity > 60) estimatedAccuracy = '+/-0.5g (ok)';
-    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: this.multiCal.getPointCount(), r2: r2, deltaA: deltaA };
+    const points = this.multiCal.getPointCount();
+    let estimatedAccuracy = '±1g (poor)';
+    if (points >= 2 && this.sensitivity > 250 && r2 > 0.97) estimatedAccuracy = '±0.1g (excellent)';
+    else if (this.sensitivity > 250) estimatedAccuracy = '±0.1g (potential)';
+    else if (this.sensitivity > 200 && r2 > 0.95) estimatedAccuracy = '±0.2g (very good)';
+    else if (this.sensitivity > 120 && r2 > 0.90) estimatedAccuracy = '±0.3g (good)';
+    else if (this.sensitivity > 60) estimatedAccuracy = '±0.5g (ok)';
+    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA };
   }
 
   verifyAgainstKnown(knownWeight, options) {
@@ -290,6 +393,12 @@ class SimpleScale {
     if (this.verificationHistory.length > 20) this.verificationHistory.shift();
     this._saveCalibration();
     return result;
+  }
+
+  applyKnownWeight(knownGrams, options) {
+    const verify = this.verifyAgainstKnown(knownGrams, options || { tolerance: 0.1 });
+    const cal = this.calibrate(knownGrams);
+    return { cal: cal, verify: verify };
   }
 
   getAccuracyEvidence(signalConfidence) {
@@ -330,27 +439,53 @@ class SimpleScale {
     };
   }
 
+  _biasCorrect(grams) {
+    const stats = this.getVerificationStats();
+    if (!stats || stats.totalVerifications < 2) return grams;
+    if (Math.abs(stats.meanError) > 0.4) return grams;
+    return Math.max(0, grams - stats.meanError);
+  }
+
+  _toTenth(grams) {
+    return Math.round(grams * 10) / 10;
+  }
+
   async measurePrecision(durationMs) {
-    if (durationMs == null) durationMs = 5000;
+    if (durationMs == null) durationMs = 8000;
     const readings = [];
     const startTime = Date.now();
     const self = this;
     return new Promise(function(resolve) {
       const interval = setInterval(function() {
-        if (!self.motionBlocked && self.isStable) readings.push(self.rawWeight);
-        if (Date.now() - startTime >= durationMs) {
+        if (!self.motionBlocked && self.baseline) readings.push(self.rawWeight);
+        const elapsed = Date.now() - startTime;
+        if (typeof self.onProgress === 'function') {
+          self.onProgress({ phase: 'precision', pct: Math.min(1, elapsed / durationMs), message: 'Averaging for 0.1g...' });
+        }
+        if (elapsed >= durationMs) {
           clearInterval(interval);
-          if (readings.length < 10) {
-            resolve({ grams: 0, stdDev: Infinity, confidence: 0, sampleCount: readings.length });
+          if (readings.length < 20) {
+            resolve({ grams: 0, stdDev: Infinity, confidence: 0, sampleCount: readings.length, precisionTier: 'coarse', tenthGram: false });
             return;
           }
-          const values = readings.slice().sort(function(a,b){return a-b;});
-          const trim = Math.floor(values.length * 0.1);
+          const values = readings.slice().sort(function(a, b) { return a - b; });
+          const trim = Math.floor(values.length * 0.15);
           const trimmed = values.slice(trim, values.length - trim);
-          const mean = trimmed.reduce(function(a,b){return a+b;},0) / trimmed.length;
-          const variance = trimmed.reduce(function(a,b){return a+(b-mean)*(b-mean);},0) / trimmed.length;
+          const mean = trimmed.reduce(function(a, b) { return a + b; }, 0) / trimmed.length;
+          const corrected = self._biasCorrect(mean);
+          const variance = trimmed.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / trimmed.length;
           const stdDev = Math.sqrt(variance);
-          resolve({ grams: mean, stdDev: stdDev, sampleCount: trimmed.length, confidence: Math.max(0, 1 - stdDev / 0.5), targetAchieved: stdDev <= 0.05 });
+          const tenth = stdDev <= 0.08 && self.calibrated;
+          const grams = tenth ? self._toTenth(corrected) : Math.round(corrected * 100) / 100;
+          resolve({
+            grams: grams,
+            stdDev: stdDev,
+            sampleCount: trimmed.length,
+            confidence: Math.max(0, 1 - stdDev / 0.3),
+            targetAchieved: stdDev <= 0.1,
+            tenthGram: tenth,
+            precisionTier: stdDev <= 0.05 ? '0.05g' : (stdDev <= 0.1 ? '0.1g' : (stdDev <= 0.2 ? '0.2g' : 'coarse'))
+          });
         }
       }, 50);
     });
@@ -411,6 +546,8 @@ class SimpleScale {
     this.baseline = null; this.calibrated = false; this.sensitivity = 150;
     this.multiCal.clear(); this.verificationHistory = [];
     this.kalmanX.reset(); this.kalmanY.reset(); this.kalmanZ.reset();
+    this.medX.reset(); this.medY.reset(); this.medZ.reset();
+    this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset(); this.stabilityCheck.reset(); this.emaWeight.reset();
     this.displayWeight = 0; this.rawWeight = 0; this.lastDisplayValue = 0; this.stableCounter = 0;
     this._tare_in_progress = false;
