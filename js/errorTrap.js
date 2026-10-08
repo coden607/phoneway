@@ -14,7 +14,7 @@
         src:  String(src || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
         line: Number(line) || 0,
         col:  Number(col)  || 0,
-        v:    '5.0.0'
+        v:    '5.1.0'
       };
       fetch('/api/telemetry', {
         method: 'POST',
