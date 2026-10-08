@@ -1,6 +1,7 @@
 'use strict';
 
 import { TiltCorrector } from './sensorCombinations.js';
+import { VerificationLedger } from './verificationLedger.js';
 class SensorComboFusion {
   constructor(){ this.channels={}; }
   mark(n,v,w){ this.channels[n]={value:v,weight:w,last:Date.now()}; }
@@ -76,6 +77,10 @@ class SimpleScale {
     this._tare_resolve = null;
     this.sampleRate = 60;
     this.verificationHistory = [];
+    // Honesty engine: the ONLY source of "±Xg" accuracy claims (see
+    // js/verificationLedger.js). Each verifyAgainstKnown() appends one
+    // {timestamp, referenceWeight, measuredError, deviceModel} record.
+    this.ledger = new VerificationLedger();
     this.onWeight = null;
     this.onRaw = null;
     this.onStable = null;
@@ -367,12 +372,12 @@ class SimpleScale {
     this._saveCalibration();
     const r2 = this.multiCal.quality;
     const points = this.multiCal.getPointCount();
-    let estimatedAccuracy = '±1g (poor)';
-    if (points >= 2 && this.sensitivity > 250 && r2 > 0.97) estimatedAccuracy = '±0.1g (excellent)';
-    else if (this.sensitivity > 250) estimatedAccuracy = '±0.1g (potential)';
-    else if (this.sensitivity > 200 && r2 > 0.95) estimatedAccuracy = '±0.2g (very good)';
-    else if (this.sensitivity > 120 && r2 > 0.90) estimatedAccuracy = '±0.3g (good)';
-    else if (this.sensitivity > 60) estimatedAccuracy = '±0.5g (ok)';
+    // HONESTY (2026-10-08): accuracy claims come ONLY from the verification
+    // ledger — measured errors against known weights on THIS device. The old
+       // sensitivity/R² heuristic ("±0.1g (excellent)") described curve-fit
+    // shape, never true error, and is removed.
+    const claim = this.ledger.accuracyClaim();
+    const estimatedAccuracy = claim.count > 0 ? claim.text + ' (measured)' : 'UNVERIFIED — run VERIFY';
     return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA };
   }
 
@@ -391,13 +396,22 @@ class SimpleScale {
     const result = {
       valid: true, reference: reference, knownGrams: knownGrams, measuredGrams: measured,
       errorGrams: errorGrams, error: errorGrams, errorPercent: (errorGrams / knownGrams) * 100,
-      tolerance: tolerance, strictTolerance: Math.min(tolerance, 0.1),
+      tolerance: tolerance, strictTolerance: tolerance,
       accuracy: Math.max(0, 100 - Math.abs((errorGrams / knownGrams) * 100)),
-      isWithinTolerance: absError <= tolerance, passed: absError <= Math.min(tolerance, 0.1),
+      isWithinTolerance: absError <= tolerance, passed: absError <= tolerance,
       timestamp: Date.now()
     };
     this.verificationHistory.push(result);
     if (this.verificationHistory.length > 20) this.verificationHistory.shift();
+    // Record into the verification ledger — the evidence base for all public
+    // accuracy claims. (Verify pass threshold was previously hardcoded to
+    // 0.1g, which failed honest 5g verifies at 0.12g error; tolerance is now
+    // the reference's own tolerance.)
+    this.ledger.record({
+      timestamp: result.timestamp,
+      referenceWeight: knownGrams,
+      measuredError: errorGrams
+    });
     this._saveCalibration();
     return result;
   }
@@ -411,39 +425,47 @@ class SimpleScale {
   getAccuracyEvidence(signalConfidence) {
     if (signalConfidence == null) signalConfidence = this.confidence;
     const signal = Math.max(0, Math.min(1, signalConfidence));
-    const history = this.verificationHistory;
     const cal = this.getCalibrationQuality();
     if (!this.calibrated) {
       return { confidence: Math.max(0.05, signal * 0.35), verified: false, uncertainty: Infinity, samples: 0, calibrationScore: 0, precisionTier: 'unverified' };
     }
     const calibrationScore = Math.max(0, Math.min(1, (cal.r2 || 0) * 0.7 + Math.min(cal.points, 4) / 4 * 0.3));
-    if (history.length === 0) {
+    // Uncertainty comes from the verification ledger — measured error on this
+    // device — not from sensitivity heuristics.
+    const ledgerStats = this.ledger.stats();
+    if (!ledgerStats) {
       return { confidence: Math.min(0.7, signal * 0.55 + calibrationScore * 0.45), verified: false, uncertainty: Infinity, samples: 0, calibrationScore: calibrationScore, precisionTier: 'unverified' };
     }
-    const errors = history.map(function(v){ return Math.abs(v.errorGrams != null ? v.errorGrams : (v.error || 0)); });
-    const meanAbsoluteError = errors.reduce(function(s,e){return s+e;},0) / errors.length;
-    const worstError = Math.max.apply(null, errors);
+    const errors = this.ledger.recent().map(function(v){ return Math.abs(v.measuredError); });
+    const meanAbsoluteError = ledgerStats.meanAbsError;
+    const worstError = ledgerStats.maxAbsError;
     const uncertainty = Math.max(meanAbsoluteError, worstError);
     return {
       confidence: Math.min(0.99, signal * 0.4 + calibrationScore * 0.35 + Math.max(0, 1 - uncertainty) * 0.25),
-      verified: true, uncertainty: uncertainty, samples: history.length, calibrationScore: calibrationScore,
-      tenthGramDemonstrated: history.length >= 3 && worstError <= 0.1,
+      verified: true, uncertainty: uncertainty, samples: errors.length, calibrationScore: calibrationScore,
+      tenthGramDemonstrated: errors.length >= 3 && worstError <= 0.1,
       precisionTier: worstError <= 0.1 ? '0.1g' : (uncertainty <= 0.2 ? '0.2g' : 'coarse')
     };
   }
 
   getVerificationStats() {
-    if (!this.verificationHistory.length) return null;
-    const errors = this.verificationHistory.map(function(v){ return v.errorGrams; });
-    const meanError = errors.reduce(function(a,b){return a+b;},0) / errors.length;
+    const s = this.ledger.stats();
+    if (!s) return null;
+    const signed = this.ledger.recent().map(function(v){ return v.measuredError; });
+    const meanError = signed.reduce(function(a,b){return a+b;},0) / signed.length;
     const passed = this.verificationHistory.filter(function(v){ return v.passed; }).length;
     return {
-      totalVerifications: this.verificationHistory.length, passed: passed,
-      failed: this.verificationHistory.length - passed,
-      passRate: (passed / this.verificationHistory.length) * 100,
-      meanError: meanError, stdDev: 0, maxError: Math.max.apply(null, errors.map(Math.abs)),
-      accuracy: this.verificationHistory[this.verificationHistory.length - 1].accuracy
+      totalVerifications: s.count, passed: passed,
+      failed: s.count - passed,
+      passRate: (passed / s.count) * 100,
+      meanError: meanError, stdDev: 0, maxError: s.maxAbsError,
+      accuracy: this.verificationHistory.length ? this.verificationHistory[this.verificationHistory.length - 1].accuracy : null
     };
+  }
+
+  /** Public accuracy claim — a pure function of the verification ledger. */
+  getLedgerClaim(n) {
+    return this.ledger.accuracyClaim(n);
   }
 
   _biasCorrect(grams) {
