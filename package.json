@@ -1,18 +1,14 @@
 {
   "name": "phoneway",
-  "version": "1.0.0",
-  "description": "Precision digital scale PWA using smartphone sensor fusion, Kalman filtering & audio resonance",
+  "version": "5.0.0",
+  "description": "Honest tilt-based scale PWA. Resolution 0.1g — accuracy = your verification ledger. Zero-dependency vanilla ES modules, no build step.",
   "type": "module",
   "scripts": {
-    "serve": "node scripts/serve.mjs"
-  },
-  "dependencies": {
-    "lit": "^3.1.2"
+    "serve": "node scripts/serve.mjs",
+    "test": "vitest run",
+    "check": "node scripts/check-static.mjs"
   },
   "devDependencies": {
-    "@vitejs/plugin-basic-ssl": "^1.1.0",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.7",
-    "vitest": "^1.0.4"
+    "vitest": "^1.6.1"
   }
 }

@@ -40,7 +40,12 @@ function bestEffortDeviceModel() {
 
 function roundUpTenth(g) {
   if (!Number.isFinite(g) || g <= 0) return 0.1;
-  return Math.ceil(g * 10) / 10;
+  // Always round UP: exact tenths (0.4, 0.5) jump to the next band —
+  // a measured 0.4g error claims ±0.5g, never ±0.4g. We under-promise.
+  const t = g * 10;
+  const nearest = Math.round(t);
+  if (Math.abs(t - nearest) < 1e-9) return (nearest + 1) / 10;
+  return Math.ceil(t) / 10;
 }
 
 class VerificationLedger {

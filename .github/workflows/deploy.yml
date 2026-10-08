@@ -1,18 +1,18 @@
-name: Deploy to Vercel
+name: Test & Deploy
 
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
+  pull_request:
+    branches: [main, master]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -20,56 +20,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project
-        run: npm run build
-        continue-on-error: true
+      - name: Run tests
+        run: npm test
 
-      - name: Verify required files
+      - name: Static integrity check
+        run: node scripts/check-static.mjs
+
+      - name: Verify static PWA paths exist
         run: |
-          echo "Checking project structure..."
-          test -f index.html && echo "✓ index.html found" || echo "✗ index.html not found"
-          test -f public/manifest.json && echo "✓ manifest.json found" || echo "✗ manifest.json not found"
-          test -f public/sw.js && echo "✓ sw.js found" || echo "✗ sw.js not found"
+          test -f index.html
+          test -f manifest.json
+          test -f sw.js
+          test -f js/app.js
+          echo "Static PWA paths verified"
 
-      - name: Setup Vercel environment
-        run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "ERROR: VERCEL_TOKEN secret is not set"
-            echo "Please add it via: https://github.com/coden607/phoneway/settings/secrets/actions"
-            exit 1
-          fi
-          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
-            echo "ERROR: VERCEL_PROJECT_ID secret is not set"
-            echo "Get it from: https://vercel.com/coden607/phoneway/settings"
-            exit 1
-          fi
-          echo "✓ All required secrets configured"
+  deploy:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Clear Vercel cache
-        run: rm -rf .vercel
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Static integrity check
+        run: node scripts/check-static.mjs
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        run: |
-          npm install -g vercel@latest
-          vercel deploy --prod --token "$VERCEL_TOKEN"
-
-      - name: Deployment summary
-        if: success()
-        run: |
-          echo "✓ Deployment successful!"
-          echo ""
-          echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "View at: https://vercel.com/coden607/phoneway"
-
-      - name: Deployment failed
-        if: failure()
-        run: |
-          echo "✗ Deployment failed"
-          echo "Check Vercel logs: https://vercel.com/coden607/phoneway"
-          exit 1
