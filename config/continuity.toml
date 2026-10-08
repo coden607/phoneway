@@ -1,0 +1,66 @@
+# continuity.toml — Phoneway foundation layer (continuity-os style)
+# The bare-bones contract anything can be built over.
+# Every value here is real: the app reads this as documentation-of-intent,
+# and skills/ teaches agents to act on it. Keep it small. Keep it true.
+
+[app]
+name = "phoneway"
+version = "5.0.0"
+kind = "static-pwa"          # zero-dependency vanilla ES modules, no build step
+entry = "index.html"
+honesty_note = "Resolution 0.1g. Accuracy claims come ONLY from the on-device verification ledger (js/verificationLedger.js), never from heuristics or marketing."
+
+# ── Channels: the four measurement workflows ─────────────────
+# A "channel" is a measurement path with its own calibration + evidence.
+# Placeholders are intentional — v5 ships the tilt channel only; the
+# contract for adding another lives in skills/extend-channel/SKILL.md.
+
+[[channels]]
+id = "tilt"
+kind = "accelerometer-gravity-delta"
+status = "live"
+calibration = "js/simpleScale.js::calibrate (known weight → deflection curve)"
+evidence = "localStorage:phoneway_v5_ledger"
+notes = "Place phone face-up on a soft surface; gravity-axis deflection under load."
+
+[[channels]]
+id = "vibration-resonance"
+kind = "vibrator-frequency-shift"
+status = "placeholder"
+notes = "Cross-check path. Implement per skills/extend-channel; add evidence to the same ledger."
+
+[[channels]]
+id = "camera-deflection"
+kind = "camera-tracked-surface-deformation"
+status = "placeholder"
+
+[[channels]]
+id = "audio-resonance"
+kind = "microphone-resonance-shift"
+status = "placeholder"
+
+# ── Orchestration: what the system may ask an agent to do ─────
+[orchestration.calibrate]
+channel = "tilt"                      # default; agents may target any [[channels]] entry
+inputs = ["known_weight_grams", "stable_surface"]
+outputs = ["sensitivity_curve", "fit_grade"]   # fit grade ≠ accuracy — see policy.claims
+
+[orchestration.verify]
+channel = "tilt"
+inputs = ["reference_weight_grams"]
+outputs = ["measured_error_grams → appended to verification ledger"]
+
+[orchestration.diagnose]
+triggers = ["ledger.error_trend_worsening", "fusion.noise_spike", "user.report"]
+skills = ["diagnose"]
+
+[orchestration.extend]
+contract = "skills/extend-channel/SKILL.md"
+
+# ── Policy flags: honesty is enforced, not suggested ──────────
+[policy]
+claims = "evidence-only"              # ±Xg text may come ONLY from ledger.accuracyClaim()
+telemetry = "opt-out"                 # POST /api/telemetry; no PII, error classes only
+storage = "local-first"               # ledger + calibration never leave the device unencrypted
+fit_grade_is_not_accuracy = true      # curve-fit shape grades must never be shown as ±Xg
+under_promise = true                  # claim rounds UP to next 0.1g band

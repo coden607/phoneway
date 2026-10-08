@@ -1,19 +1,17 @@
 /**
- * app.js — Phoneway Ultra-Precision Scale v4.1.2
+ * app.js — Phoneway Scale v5.0 (Foundation Rebase)
  * 
- * Enhanced with:
- * - Multi-point calibration
- * - Reference weight verification
- * - Precision measurement mode
- * - Statistical accuracy analysis
- * - Cross-device compatibility layer
- * - Robust error handling
- * 
- * Target accuracy: ±0.2-0.5g with proper calibration
+ * Honest tilt-based scale: resolution 0.1g, accuracy = your verification
+ * ledger (js/verificationLedger.js). Foundation layer: config/continuity.toml
+ * + skills/. Zero-dependency vanilla ES modules, no build step.
  */
 
 'use strict';
 
+import './helpTooltips.js';
+import './swRegister.js';
+import './pwaInstall.js';
+import { VERSION as APP_VERSION } from './version.js';
 import { SimpleScale, MovingAverage } from './simpleScale.js';
 import { BackgroundSensorFusion } from './backgroundFusion.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
@@ -39,8 +37,6 @@ const UNITS = [
   { key: 'g',  label: 'g',  factor: 1,        places: 2 },
   { key: 'oz', label: 'oz', factor: 0.035274, places: 3 },
 ];
-
-const APP_VERSION = '4.1.2';
 
 class PhonewayApp {
   constructor() {
@@ -542,23 +538,19 @@ class PhonewayApp {
       );
     }
 
-    // Realistic precision estimate shown under the bar
+    // Accuracy claim — a pure function of the verification ledger (measured
+    // error on THIS device). No heuristics, no fit-shape guesses.
     const precEl = document.getElementById('precEst');
     if (precEl) {
       let text, color;
+      const claim = this.scale.getLedgerClaim();
       if (!this.scale.calibrated) {
         text = "CAL REQUIRED"; color = "#ff4444";
-      } else if (!evidence.verified) {
+      } else if (!claim.count) {
         text = "VERIFY REQUIRED"; color = "#ff8c00";
-      } else if (evidence.fiftyMilligramDemonstrated) {
-        text = "0.05g VERIFIED"; color = "#00ff66";
-      } else if (evidence.tenthGramDemonstrated) {
-        text = "0.1g VERIFIED"; color = "#e8c84a";
-      } else if (evidence.precisionTier === "0.05g-potential") {
-        text = "0.05g POTENTIAL"; color = "#c77dff";
       } else {
-        text = "OBS ±" + evidence.uncertainty.toFixed(2) + "g";
-        color = evidence.uncertainty <= 0.2 ? "#e8c84a" : "#ff8c00";
+        text = claim.text + " · " + claim.count + " verifies";
+        color = claim.maxAbsError <= 0.1 ? "#00ff66" : (claim.maxAbsError <= 0.3 ? "#e8c84a" : "#ff8c00");
       }
       precEl.textContent = text;
       precEl.style.color = color;
@@ -967,7 +959,7 @@ class PhonewayApp {
       this._setState('STABLE');
       
       const accuracy = (result.confidence * 100).toFixed(1);
-      const tier = result.precisionTier === "0.05g" ? "0.05g VERIFIED" : result.precisionTier === "0.1g" ? "0.1g VERIFIED" : result.precisionTier === "0.2g" ? "0.2g" : "coarse";
+      const tier = result.precisionTier === "0.05g" ? "0.05g σ" : result.precisionTier === "0.1g" ? "0.1g σ" : result.precisionTier === "0.2g" ? "0.2g σ" : "coarse";
       this._showToast(
         "Result: " + result.grams.toFixed(2) + "g (" + tier + ", σ=" + result.stdDev.toFixed(3) + "g, " + accuracy + "% conf)",
         5000
@@ -1057,15 +1049,15 @@ class PhonewayApp {
     } catch {}
 
     try {
-      telemetry.logVerify(result.knownGrams, result.measuredGrams, result.errorPercent, result.isWithinTolerance ? "PASS" : "FAIL", result.passed ? "TENTH_GRAM" : "ABOVE_TENTH");
+      telemetry.logVerify(result.knownGrams, result.measuredGrams, result.errorPercent, result.isWithinTolerance ? "PASS" : "FAIL", result.passed ? "WITHIN_TOLERANCE" : "OUT_OF_TOLERANCE");
     } catch {}
 
     this._sendTelemetry("verify", {
       referenceGrams: result.knownGrams,
       errorGrams: result.errorGrams,
       errorPct: result.errorPercent,
-      grade: result.passed ? "PASS" : "FAIL",
-      accuracyGrade: result.passed ? "TENTH_GRAM" : "ABOVE_TENTH"
+      grade: result.isWithinTolerance ? "PASS" : "FAIL",
+      accuracyGrade: result.passed ? "WITHIN_TOLERANCE" : "OUT_OF_TOLERANCE"
     });
 
     this._updateAccuracyDisplay(this.scale.confidence);
@@ -1217,21 +1209,23 @@ class PhonewayApp {
     let gradeDesc = 'Calibrate to achieve accuracy';
     
     if (this.scale.calibrated) {
+      // Grade describes CALIBRATION CURVE FIT SHAPE only. It is not an
+      // accuracy claim — measured accuracy comes from the verification ledger.
       if (calQuality.r2 > 0.98 && calQuality.points >= 4) {
         grade = 'A+';
-        gradeDesc = 'Laboratory grade — excellent calibration';
+        gradeDesc = 'Fit: excellent curve (fit shape ≠ measured accuracy — see ledger)';
       } else if (calQuality.r2 > 0.95 && calQuality.points >= 3) {
         grade = 'A';
-        gradeDesc = 'Very good accuracy — multi-point calibrated';
+        gradeDesc = 'Fit: very good curve (fit shape ≠ measured accuracy — see ledger)';
       } else if (calQuality.r2 > 0.90) {
         grade = 'B';
-        gradeDesc = 'Good accuracy — add more calibration points';
+        gradeDesc = 'Fit: good curve — add points; accuracy needs verification';
       } else if (calQuality.r2 > 0.80) {
         grade = 'C';
-        gradeDesc = 'Fair accuracy — recalibration recommended';
+        gradeDesc = 'Fit: fair curve — recalibration recommended';
       } else {
         grade = 'D';
-        gradeDesc = 'Poor accuracy — recalibration required';
+        gradeDesc = 'Fit: poor curve — recalibration required';
       }
       if (this.scale.calibrationStale) {
         gradeDesc += ' — recalibration recommended; saved history retained';
@@ -1247,16 +1241,12 @@ class PhonewayApp {
     const surface = this.scale.getSurfaceQuality();
     const precisionEl = document.getElementById('accPrecision');
     if (precisionEl) {
-      if (evidence.fiftyMilligramDemonstrated) {
-        precisionEl.textContent = '~±0.05g';
-      } else if (evidence.tenthGramDemonstrated) {
-        precisionEl.textContent = '~±0.1g';
-      } else if (calQuality.r2 > 0.95) {
-        precisionEl.textContent = surface === 'excellent' ? '~±0.2g' : '~±0.3g';
-      } else if (calQuality.r2 > 0.90) {
-        precisionEl.textContent = '~±0.5g';
+      // Measured accuracy comes ONLY from the verification ledger.
+      const claim = this.scale.getLedgerClaim();
+      if (claim.count > 0) {
+        precisionEl.textContent = claim.text + ' (measured, ' + claim.count + ' verifies)';
       } else {
-        precisionEl.textContent = '~±1g';
+        precisionEl.textContent = 'unverified — run VERIFY';
       }
     }
     

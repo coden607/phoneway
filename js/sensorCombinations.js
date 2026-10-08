@@ -49,7 +49,8 @@ class GyroGate {
    frequency (within 8%), this strongly confirms the mass estimate.
    Confidence: 0.80 for 2 sources, +0.08 per additional. Max 0.95.
 
-   Uses same resonance formula as audio.js / vibrationHammer.js:
+   Uses same resonance formula as audio.js (vibrationHammer module
+   was removed in the v5 rebase):
      m_added = m_phone × ((f_empty / f_loaded)² − 1)
 ═══════════════════════════════════════════════════════════════ */
 class FrequencyConsensus {

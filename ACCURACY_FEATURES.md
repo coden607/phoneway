@@ -1,6 +1,11 @@
 # Phoneway v3.0 — Ultra-Precision Features
 
-## Target Accuracy: ±0.1g (0.05g 1σ)
+## Display Resolution: 0.1g — Measured Accuracy = Your Verification Ledger
+
+> Honest note (foundation v5): 0.1g is display resolution, not guaranteed accuracy.
+> Tilt-based measurement on a phone typically achieves ±0.2–0.5g depending on device,
+> surface, and calibration. Your on-device Verification Ledger is the only source of truth
+> for what THIS device can do. Grades below reflect measured error bands, not promises.
 
 ---
 
@@ -118,42 +123,34 @@ Every verified measurement logs:
 - Temperature-aware corrections
 
 ### Community Priors
-- Phone mass buckets (60-300g)
-- Suggested sensitivity values
-- Surface recommendations
-- Regional coin specifications
+Removed in the v5 rebase — `data/community-priors.json` was fabricated data fetched only by the deleted `learningEngine.js`. Calibration priors now come only from your own device (localStorage).
 
 ---
 
 ## 🔧 Technical Architecture
 
-### New Modules
+### Modules
+
+The v5 rebase removed the ML/fusion modules that used to live here
+(see `docs/legacy/DEAD-CODE-2026-10-08.md`). Live architecture:
 
 ```
 js/
-├── mlCalibration.js       # Neural network + ensemble
-├── advancedFusion.js      # Particle filter + agreement
-├── environmentalSensors.js # Barometer + battery + orientation
-├── ultraPrecision.js      # High-precision measurement engine
-└── app.js                 # Main app (updated)
-
-data/
-├── error-logger.js        # Global error logging system
-└── community-priors.json  # Crowd-sourced calibration data
+├── simpleScale.js          # tilt→grams measurement path
+├── verificationLedger.js   # the only source of ±Xg claims
+├── scaleMath.js            # calibration-curve math
+├── backgroundFusion.js     # passive validators (confidence only)
+└── app.js                  # main app
 ```
 
 ### Data Flow
 
 ```
-Raw Sensors → Kalman Filter → Feature Extraction
-                                    ↓
-Particle Filter ← Sensor Agreement ← Fusion
-        ↓
-Neural Network Correction
-        ↓
-Environmental Compensation
-        ↓
-Final Weight (0.1g accuracy target)
+DeviceMotion (gravity axis, m/s²) → baseline → tilt-delta
+    → calibration curve (tilt-delta → grams)
+    → median/moving-average/Kalman smoothing
+    → Final Weight (display resolution 0.1g;
+      accuracy = verification-ledger claim, typically ±0.5g)
 ```
 
 ---
@@ -265,4 +262,4 @@ Planned features for v3.1:
 
 **Created**: 2026-02-28  
 **Version**: 3.0 Ultra-Precision  
-**Target**: ±0.1g accuracy through machine learning
+**Reality**: no ML claim ships without on-device evidence in the Verification Ledger.

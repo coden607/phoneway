@@ -1,8 +1,11 @@
 /**
- * sw.js — Service Worker for Phoneway Precision Scale v4.1.3
+ * sw.js — Service Worker for Phoneway Scale v5.0.0
+ *
+ * Caches ONLY the live module graph (dead modules removed 2026-10-08,
+ * see docs/legacy/DEAD-CODE-2026-10-08.md).
  */
 
-const CACHE = 'phoneway-v4.1.3-e2e-4';
+const CACHE = 'phoneway-v5.0.0';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -10,33 +13,25 @@ const ASSETS = [
   BASE + 'index.html',
   BASE + 'manifest.json',
   BASE + 'css/style.css',
+  BASE + 'js/version.js',
   BASE + 'js/kalman.js',
-  BASE + 'js/sensors.js',
   BASE + 'js/audio.js',
   BASE + 'js/display.js',
   BASE + 'js/liveUi.js',
-  BASE + 'js/vibrationHammer.js',
-  BASE + 'js/genericSensors.js',
   BASE + 'js/cameraSensor.js',
-  BASE + 'js/learningEngine.js',
   BASE + 'js/sensorCombinations.js',
   BASE + 'js/referenceWeights.js',
   BASE + 'js/deviceCompat.js',
-  BASE + 'js/precisionEngine.js',
-  BASE + 'js/mlCalibration.js',
-  BASE + 'js/advancedFusion.js',
-  BASE + 'js/environmentalSensors.js',
-  BASE + 'js/ultraPrecision.js',
-  BASE + 'js/quantumFusion.js',
-  BASE + 'js/thermalCompensation.js',
-  BASE + 'js/advancedVerification.js',
-  BASE + 'data/community-priors.json',
-  BASE + 'js/adaptiveFilter.js',
-  BASE + 'js/predictiveCalibration.js',
+  BASE + 'js/verificationLedger.js',
   BASE + 'js/telemetry.js',
   BASE + 'js/scaleMath.js',
   BASE + 'js/simpleScale.js',
+  BASE + 'js/helpTooltips.js',
+  BASE + 'js/swRegister.js',
+  BASE + 'js/pwaInstall.js',
   BASE + 'js/app.js',
+  BASE + 'data/error-logger.js',
+  BASE + 'config/continuity.toml',
   BASE + 'icons/icon.svg',
   BASE + 'icons/icon-192.png',
   BASE + 'icons/icon-512.png',

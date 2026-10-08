@@ -1,10 +1,10 @@
 {
-  "id": "com.phoneway.scale.v3",
-  "name": "Phoneway Ultra-Precision Scale v4.1",
+  "id": "com.phoneway.scale.v5",
+  "name": "Phoneway Scale v5.0",
   "short_name": "Phoneway",
-  "description": "Professional-grade 0.1g accuracy scale using quantum-inspired 15-sensor fusion, neural networks, and machine learning. Self-calibrating with thermal compensation and laboratory-grade verification.",
-  "version": "4.1.2",
-  "start_url": "./?v=4.1.2",
+  "description": "Tilt-based scale for your phone. Resolution 0.1g · Accuracy = your calibration result (typically ±0.5g; see the in-app Verification Ledger). Weigh by verified measurement, not marketing.",
+  "version": "5.0.0",
+  "start_url": "./?v=5.0.0",
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
@@ -85,29 +85,29 @@
     {
       "name": "⚡ Quick Weigh",
       "short_name": "Weigh",
-      "url": "./?mode=ultra&v=4.1.2",
-      "description": "Start ultra-precision weighing immediately",
+      "url": "./?mode=ultra&v=5.0.0",
+      "description": "Start weighing immediately",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "⚖️ Calibrate",
       "short_name": "Calibrate",
-      "url": "./?cal=true&v=4.1.2",
-      "description": "Calibrate with known weight for maximum accuracy",
+      "url": "./?cal=true&v=5.0.0",
+      "description": "Calibrate with a known weight for your device and surface",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "📊 Accuracy Report",
       "short_name": "Stats",
-      "url": "./?view=stats&v=4.1.2",
-      "description": "View accuracy metrics and ML training status",
+      "url": "./?view=stats&v=5.0.0",
+      "description": "View your verification ledger and measured accuracy",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "🔬 Verify",
       "short_name": "Verify",
-      "url": "./?verify=true&v=4.1.2",
-      "description": "Verify accuracy with known reference weight",
+      "url": "./?verify=true&v=5.0.0",
+      "description": "Measure a known reference weight and add evidence to your ledger",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     }
   ],
