@@ -60,6 +60,19 @@ html, body {
   border-bottom: 1px solid var(--aurum-line);
 }
 
+.brand-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-scale-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  filter: drop-shadow(0 0 8px rgba(255, 179, 0, 0.45));
+}
+
 .brand-name {
   font-size: 30px !important;
   letter-spacing: 5px;

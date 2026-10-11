@@ -6,9 +6,9 @@
   <meta name="mobile-web-app-capable"                content="yes"/>
   <meta name="apple-mobile-web-app-capable"          content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title"            content="Phoneway"/>
+  <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
-  <title>Phoneway v5.0 — Tilt-Based Scale</title>
+  <title>PhoneWeigh v5.1 — Digital Precision Scale</title>
   <link rel="manifest"          href="manifest.json?v=5.1.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
   <link rel="stylesheet"        href="css/style.css?v=5.1.0"/>
@@ -86,7 +86,27 @@
   <!-- ── Header ─────────────────────────────────────────────── -->
   <div id="header">
     <div class="brand">
-      <div class="brand-name">PHONEWAY</div>
+      <div class="brand-title-wrap">
+        <svg class="brand-scale-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Digital scale icon">
+          <rect x="3" y="3" width="18" height="3" rx="1.5" fill="url(#brandScaleGold)"/>
+          <rect x="3" y="3" width="18" height="3" rx="1.5" stroke="#f2c86b" stroke-width="0.75"/>
+          <rect x="2" y="7.5" width="20" height="13" rx="3" fill="#141009" stroke="#d4af37" stroke-width="1.2"/>
+          <rect x="5" y="10.5" width="9.5" height="6.5" rx="1" fill="#080602" stroke="#b8860b" stroke-width="0.75"/>
+          <text x="9.75" y="15.2" font-family="'Share Tech Mono', monospace" font-size="4" font-weight="bold" fill="#ffb300" text-anchor="middle">0.0g</text>
+          <circle cx="17.5" cy="12" r="1.3" fill="#d4af37"/>
+          <circle cx="17.5" cy="15.5" r="1.3" fill="#8f4137"/>
+          <rect x="4.5" y="20.5" width="3" height="1.2" rx="0.6" fill="#b8860b"/>
+          <rect x="16.5" y="20.5" width="3" height="1.2" rx="0.6" fill="#b8860b"/>
+          <defs>
+            <linearGradient id="brandScaleGold" x1="3" y1="3" x2="21" y2="6" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#ffe9a3"/>
+              <stop offset="0.5" stop-color="#d4af37"/>
+              <stop offset="1" stop-color="#996b00"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="brand-name">PHONEWEIGH</div>
+      </div>
       <div class="brand-sub">PRECISION DIGITAL SCALE · SENSOR FUSION</div>
     </div>
 
@@ -383,7 +403,7 @@
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <div id="footer">
     <div class="footer-stack">
-      <div class="footer-text">PHONEWAY v5.0 · TILT-BASED SCALE · 0.1g RESOLUTION · ACCURACY = YOUR VERIFICATION LEDGER</div>
+      <div class="footer-text">PHONEWEIGH v5.1 · DIGITAL SCALE · 0.1g RESOLUTION · ACCURACY = YOUR VERIFICATION LEDGER</div>
       <div class="footer-credit">CREATED BY <span class="credit-name">STEVE B</span> AKA <span class="credit-handle">CODEN809</span></div>
     </div>
     <div class="footer-gems">
@@ -569,7 +589,7 @@
 <div id="installBanner">
   <div class="install-icon">⚖️</div>
   <div class="install-text">
-    <div class="install-title">📲 INSTALL PHONEWAY</div>
+    <div class="install-title">📲 INSTALL PHONEWEIGH</div>
     <div class="install-sub" id="installSubText">One-click install — Desktop icon — Works offline</div>
     <div class="install-features">
       <span>✓ 0.1g Resolution</span>
@@ -589,7 +609,7 @@
     <div style="font-size:48px; margin-bottom:16px;">💻</div>
     <div style="font-size:18px; font-weight:bold; color:var(--gold); letter-spacing:2px; margin-bottom:8px;">INSTALL ON DESKTOP</div>
     <div style="font-size:12px; color:#888; line-height:1.6; margin-bottom:20px;">
-      Install Phoneway as a desktop app for one-click access.<br>
+      Install PhoneWeigh as a desktop app for one-click access.<br>
       No browser tabs needed — launches like any app!
     </div>
     <div style="background:#0a0a0a; border-radius:8px; padding:16px; margin-bottom:20px; text-align:left;">
@@ -597,7 +617,7 @@
       <ol style="font-size:12px; color:#ccc; line-height:2; margin:0; padding-left:20px;">
         <li>Click <strong style="color:var(--gold);">INSTALL NOW</strong> below</li>
         <li>Click <strong style="color:var(--gold);">Install</strong> in the browser prompt</li>
-        <li>Find <strong style="color:var(--gold);">Phoneway</strong> on your desktop!</li>
+        <li>Find <strong style="color:var(--gold);">PhoneWeigh</strong> on your desktop!</li>
       </ol>
     </div>
     <div style="display:flex; gap:12px;">
@@ -612,7 +632,7 @@
   <div style="display:flex; align-items:center; gap:12px;">
     <span>📲</span>
     <div>
-      <strong style="color:var(--gold);">INSTALL PHONEWAY</strong><br>
+      <strong style="color:var(--gold);">INSTALL PHONEWEIGH</strong><br>
       <small>Tap <strong>Share ⬆</strong> then <strong>Add to Home Screen</strong></small>
     </div>
   </div>
@@ -808,7 +828,7 @@
     </div>
 
     <div style="text-align:center;color:#666;font-size:9px;margin-top:10px;line-height:1.5">
-      Phoneway is intended for lawful, personal, and educational use only.<br>
+      PhoneWeigh is intended for lawful, personal, and educational use only.<br>
       Do not use it for illegal activity or to violate local laws, regulations, or property rules.
     </div>
   </div>

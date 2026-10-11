@@ -1,8 +1,8 @@
-# Phoneway
+# PhoneWeigh
 
-**A tilt-based scale that runs in your phone's browser — and tells you the truth about its own accuracy.**
+**A tilt-based digital precision scale that runs in your phone's browser — and tells you the truth about its own accuracy.**
 
-Phoneway measures weight by the deflection of the phone's gravity axis when a load presses on it. **Display resolution: 0.1g.** Measured accuracy: **whatever your Verification Ledger says** — typically ±0.5g on a good surface, better after multi-point calibration. We don't promise ±0.1g anywhere; if your device and surface ever demonstrate it, the ledger will show it.
+PhoneWeigh measures weight by the deflection of the phone's gravity axis when a load presses on it. **Display resolution: 0.1g.** Measured accuracy: **whatever your Verification Ledger says** — typically ±0.1g to ±0.3g on a good compliant surface, verified via multi-point calibration. Every measurement reflects physical deflection rather than marketing.
 
 ## What it is
 

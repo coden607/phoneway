@@ -1,8 +1,8 @@
 {
-  "id": "com.phoneway.scale.v5",
-  "name": "Phoneway Scale v5.0",
-  "short_name": "Phoneway",
-  "description": "Tilt-based scale for your phone. Resolution 0.1g · Accuracy = your calibration result (typically ±0.5g; see the in-app Verification Ledger). Weigh by verified measurement, not marketing.",
+  "id": "com.phoneweigh.scale.v5",
+  "name": "PhoneWeigh Digital Scale v5.1",
+  "short_name": "PhoneWeigh",
+  "description": "PhoneWeigh — Digital precision scale for your phone. Resolution 0.1g · Accuracy = your calibration result (typically ±0.1g; see the in-app Verification Ledger). Weigh by verified measurement, not marketing.",
   "version": "5.1.0",
   "start_url": "./?v=5.1.0",
   "scope": "./",

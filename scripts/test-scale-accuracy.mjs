@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { DirectionalProjection, MultiPointCalibration, MovingAverage, SimpleKalman } from '../js/scaleMath.js';
 import { SimpleScale } from '../js/simpleScale.js';
 
-console.log('🧪 Testing Phoneway 0.1g Precision Math...\n');
+console.log('🧪 Testing PhoneWeigh 0.1g Precision Math...\n');
 
 // 1. Test DirectionalProjection eliminates Rayleigh positive noise floor bias
 {
