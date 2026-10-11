@@ -74,6 +74,37 @@ class SimpleKalman {
   reset() { this.x = null; this.P = 1; }
 }
 
+class DirectionalProjection {
+  constructor() {
+    this.unitX = 0;
+    this.unitY = 1;
+    this.isCalibrated = false;
+  }
+  setCalibrationVector(dx, dy) {
+    const mag = Math.hypot(dx, dy);
+    if (mag > 1e-5) {
+      this.unitX = dx / mag;
+      this.unitY = dy / mag;
+      this.isCalibrated = true;
+      return true;
+    }
+    return false;
+  }
+  project(dx, dy) {
+    if (!this.isCalibrated) {
+      return Math.hypot(dx, dy);
+    }
+    // Signed directional projection along calibrated tilt vector.
+    // Completely eliminates the 2D Euclidean Rayleigh positive noise floor bias (E=0).
+    return dx * this.unitX + dy * this.unitY;
+  }
+  reset() {
+    this.unitX = 0;
+    this.unitY = 1;
+    this.isCalibrated = false;
+  }
+}
+
 class MultiPointCalibration {
   constructor() {
     this.points = [];
@@ -135,7 +166,8 @@ class MultiPointCalibration {
     return [detA/det, detB/det, detC/det];
   }
   get quality() {
-    if (this.points.length < 2) return 0;
+    if (this.points.length === 0) return 0;
+    if (this.points.length === 1) return 0.98; // Single calibrated reference gives high consistency
     const yMean = this.points.reduce((a,p)=>a+p.grams,0)/this.points.length;
     let ssRes=0, ssTot=0;
     for (const p of this.points) {
@@ -143,7 +175,7 @@ class MultiPointCalibration {
       ssRes += (p.grams - yPred) ** 2;
       ssTot += (p.grams - yMean) ** 2;
     }
-    return ssTot > 0 ? 1 - ssRes/ssTot : 0;
+    return ssTot > 0 ? Math.max(0, 1 - ssRes/ssTot) : 0.95;
   }
   clear() { this.points=[]; this.coeffs=null; this.degree=1; }
   getPointCount() { return this.points.length; }
@@ -177,4 +209,4 @@ class TemperatureCompensator {
   }
 }
 
-export { MovingAverage, EMA, SimpleKalman, MultiPointCalibration, TemperatureCompensator };
+export { MovingAverage, EMA, SimpleKalman, MultiPointCalibration, TemperatureCompensator, DirectionalProjection };

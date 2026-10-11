@@ -6,6 +6,7 @@
   "scripts": {
     "serve": "node scripts/serve.mjs",
     "test": "vitest run",
+    "test:accuracy": "node scripts/test-scale-accuracy.mjs",
     "check": "node scripts/check-static.mjs"
   },
   "devDependencies": {

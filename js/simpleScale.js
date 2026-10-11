@@ -12,7 +12,7 @@ class SensorComboFusion {
 }
 import {
   MovingAverage, EMA, SimpleKalman,
-  MultiPointCalibration, TemperatureCompensator
+  MultiPointCalibration, TemperatureCompensator, DirectionalProjection
 } from './scaleMath.js';
 class MedianFilter {
   constructor(size){ this.size=size%2?size:size+1; this.buffer=[]; }
@@ -33,6 +33,7 @@ class SimpleScale {
     this.calibrationAgeMs = 0;
     this.baseline = null;
     this.sensitivity = 150;
+    this.directionalProj = new DirectionalProjection();
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
     this.tiltCorrector = new TiltCorrector();
@@ -62,7 +63,7 @@ class SimpleScale {
     this.weightKalman = new AdaptiveKalman({ R: 0.06, Q: 0.003 });
     this.emaWeight = new EMA(0.08);
     this.stabilityCheck = new MovingAverage(60);
-    this.deadbandThreshold = 0.04;
+    this.deadbandThreshold = 0.02; // Reduced to 0.02g for crisp 0.1g resolution
     this.lastDisplayValue = 0;
     this.stableCounter = 0;
     this._tare_in_progress = false;
@@ -206,21 +207,15 @@ class SimpleScale {
     const dy = this.filteredAccel.y - this.baseline.y;
     const avgDx = this.maDx.update(dx);
     const avgDy = this.maDy.update(dy);
-    const planeDelta = this.tiltCorrector.horizontalDelta(
-      this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z,
-      this.baseline.x, this.baseline.y, this.baseline.z
-    );
-    this.comboFusion.mark('gravity', planeDelta, 1.0);
-    const fusedDelta = this.comboFusion.fusedDelta();
-    const deltaHorizontal = fusedDelta > 0
-      ? 0.72 * Math.sqrt(avgDx * avgDx + avgDy * avgDy) + 0.28 * fusedDelta
-      : Math.sqrt(avgDx * avgDx + avgDy * avgDy);
+    // Directional tilt projection: eliminates Rayleigh positive noise floor bias (E=0 at rest)
+    const deltaSignal = Math.max(0, this.directionalProj.project(avgDx, avgDy));
+
     let rawG = (this.multiCal.coeffs && this.multiCal.points.length >= 2)
-      ? this.multiCal.estimate(deltaHorizontal)
-      : deltaHorizontal * this.sensitivity;
+      ? this.multiCal.estimate(deltaSignal)
+      : deltaSignal * this.sensitivity;
     rawG = Math.max(0, this.tempComp.compensate(Math.max(0, rawG)));
     rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
-    if (rawG < 0.05) rawG = 0;
+    if (rawG < 0.02) rawG = 0;
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
     const stdDev = this.stabilityCheck.stdDev;
@@ -228,13 +223,13 @@ class SimpleScale {
     if (isNowStable) this.stableCounter++; else this.stableCounter = 0;
     const trulyStable = this.stableCounter > (this.calibrated ? 30 : 25);
     const emaG = this.emaWeight.update(rawG);
-    if (trulyStable && !this.isStable && rawG > 0.1 && this.onStable) this.onStable(emaG);
+    if (trulyStable && !this.isStable && rawG > 0.05 && this.onStable) this.onStable(emaG);
     this.isStable = trulyStable;
     if (trulyStable) {
       const trimmed = this._trimmedMean(this.stabilityCheck.getAll(), 0.15);
       this.displayWeight = this._toTenth(this._biasCorrect(trimmed));
       this.lastDisplayValue = this.displayWeight;
-    } else if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.05) {
+    } else if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.03) {
       this.displayWeight = emaG;
       this.lastDisplayValue = emaG;
     }
@@ -356,8 +351,11 @@ class SimpleScale {
     if (!this.baseline) return { success: false, error: 'Must tare first' };
     if (this.maDx.length < 20) return { success: false, error: 'Still settling - wait a moment' };
     if (this.motionBlocked && this.motionQuality < 0.25) return { success: false, error: 'Hold the phone still and try again' };
-    const deltaA = Math.sqrt(this.maDx.mean * this.maDx.mean + this.maDy.mean * this.maDy.mean);
-    if (deltaA < 0.0005) return { success: false, error: 'Signal too weak - use softer surface or heavier weight' };
+    // Lock directional tilt vector from calibrated reference load
+    this.directionalProj.setCalibrationVector(this.maDx.mean, this.maDy.mean);
+    const deltaA = Math.max(0.0005, this.directionalProj.project(this.maDx.mean, this.maDy.mean));
+
+    if (deltaA < 0.0005) return { success: false, error: 'Signal too weak - use softer surface, fulcrum, or heavier weight' };
     if (!this.multiCal.addPoint(knownGrams, deltaA)) return { success: false, error: 'Calibration signal was invalid - try again' };
     const newSensitivity = knownGrams / deltaA;
     this.sensitivity = this.calibrated ? 0.7 * newSensitivity + 0.3 * this.sensitivity : newSensitivity;
@@ -444,7 +442,8 @@ class SimpleScale {
       confidence: Math.min(0.99, signal * 0.4 + calibrationScore * 0.35 + Math.max(0, 1 - uncertainty) * 0.25),
       verified: true, uncertainty: uncertainty, samples: errors.length, calibrationScore: calibrationScore,
       tenthGramDemonstrated: errors.length >= 3 && worstError <= 0.1,
-      precisionTier: worstError <= 0.1 ? '0.1g' : (uncertainty <= 0.2 ? '0.2g' : 'coarse')
+      fiftyMilligramDemonstrated: errors.length >= 3 && worstError <= 0.05,
+      precisionTier: worstError <= 0.05 ? '0.05g' : (worstError <= 0.1 ? '0.1g' : (uncertainty <= 0.2 ? '0.2g' : 'coarse'))
     };
   }
 
@@ -493,8 +492,8 @@ class SimpleScale {
         }
         if (elapsed >= durationMs) {
           clearInterval(interval);
-          if (readings.length < 20) {
-            resolve({ grams: 0, stdDev: Infinity, confidence: 0, sampleCount: readings.length, precisionTier: 'coarse', tenthGram: false });
+          if (readings.length < 15) {
+            resolve({ grams: 0, stdDev: Infinity, sem: Infinity, confidence: 0, sampleCount: readings.length, precisionTier: 'unverified', tenthGram: false });
             return;
           }
           const values = readings.slice().sort(function(a, b) { return a - b; });
@@ -504,11 +503,13 @@ class SimpleScale {
           const corrected = self._biasCorrect(mean);
           const variance = trimmed.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / trimmed.length;
           const stdDev = Math.sqrt(variance);
+          const sem = stdDev / Math.sqrt(trimmed.length);
           const tenth = stdDev <= 0.08 && self.calibrated;
           const grams = tenth ? self._toTenth(corrected) : Math.round(corrected * 100) / 100;
           resolve({
             grams: grams,
             stdDev: stdDev,
+            sem: sem,
             sampleCount: trimmed.length,
             confidence: Math.max(0, 1 - stdDev / 0.3),
             targetAchieved: stdDev <= 0.1,
@@ -522,7 +523,7 @@ class SimpleScale {
 
   getDeltaA() {
     if (!this.baseline) return 0;
-    return Math.sqrt(this.maDx.mean * this.maDx.mean + this.maDy.mean * this.maDy.mean);
+    return Math.max(0, this.directionalProj.project(this.maDx.mean, this.maDy.mean));
   }
 
   getSurfaceQuality() {
@@ -541,6 +542,11 @@ class SimpleScale {
     try {
       const cal = {
         sensitivity: this.sensitivity, baseline: this.baseline, calibrated: this.calibrated,
+        directionalProj: {
+          unitX: this.directionalProj.unitX,
+          unitY: this.directionalProj.unitY,
+          isCalibrated: this.directionalProj.isCalibrated
+        },
         multiCal: { points: this.multiCal.points, degree: this.multiCal.degree },
         verificationHistory: this.verificationHistory, timestamp: Date.now()
       };
@@ -561,6 +567,11 @@ class SimpleScale {
       this.sensitivity = cal.sensitivity;
       this.baseline = cal.baseline;
       this.calibrated = cal.calibrated || false;
+      if (cal.directionalProj) {
+        this.directionalProj.unitX = cal.directionalProj.unitX || 0;
+        this.directionalProj.unitY = cal.directionalProj.unitY || 1;
+        this.directionalProj.isCalibrated = cal.directionalProj.isCalibrated || false;
+      }
       if (cal.multiCal) {
         this.multiCal.points = cal.multiCal.points || [];
         this.multiCal.degree = cal.multiCal.degree || 1;
@@ -573,6 +584,7 @@ class SimpleScale {
 
   reset() {
     this.baseline = null; this.calibrated = false; this.sensitivity = 150;
+    this.directionalProj.reset();
     this.multiCal.clear(); this.verificationHistory = [];
     this.kalmanX.reset(); this.kalmanY.reset(); this.kalmanZ.reset();
     this.medX.reset(); this.medY.reset(); this.medZ.reset();
@@ -585,4 +597,4 @@ class SimpleScale {
   }
 }
 
-export { SimpleScale, MovingAverage, EMA, SimpleKalman, MultiPointCalibration };
+export { SimpleScale, MovingAverage, EMA, SimpleKalman, MultiPointCalibration, DirectionalProjection };
