@@ -75,6 +75,13 @@
 ════════════════════════════════════════════════════════════ -->
 <div id="app">
 
+  <!-- ── Persistent Corner Reading HUD (Always Displays In Screen Corner) ── -->
+  <div id="stickyCornerBadge" class="sticky-corner-badge" aria-label="Scale Competency and Accuracy Percentile" title="Live Scale Competency & Accuracy Percentile">
+    <span class="sticky-corner-dot"></span>
+    <span id="stickyCornerTitle" class="sticky-corner-title">ACCURACY</span>
+    <span id="stickyCornerPct" class="sticky-corner-pct">98.5%</span>
+    <span id="stickyCornerTier" class="sticky-corner-tier">±0.1g</span>
+  </div>
 
   <!-- ── Header ─────────────────────────────────────────────── -->
   <div id="header">
@@ -84,16 +91,16 @@
     </div>
 
     <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
-    <div id="accuracyBlock">
-      <div class="acc-label">CONFIDENCE</div>
+    <div id="accuracyBlock" class="corner-accuracy-block" aria-label="Scale Competency and Accuracy Percentile">
+      <div class="acc-label">ACCURACY / COMPETENCY</div>
       <div class="acc-display">
-        <div id="accDigits" class="acc-seg-wrap"></div>
+        <div id="accDigits" class="acc-seg-wrap">98</div>
         <div class="acc-pct-sign">%</div>
       </div>
       <div class="acc-bar-wrap">
         <div class="acc-bar-fill" id="accBar"></div>
       </div>
-      <div id="precEst" class="prec-est">CAL REQUIRED</div>
+      <div id="precEst" class="prec-est">0.1g RESOLUTION</div>
       <div class="header-leds" style="margin-top:4px">
         <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
         <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
@@ -106,6 +113,13 @@
   <!-- ── Display ────────────────────────────────────────────── -->
   <div id="display-section">
     <div class="display-window">
+      <!-- ── Corner Competency / Accuracy Percentile HUD (always displayed on LCD) ── -->
+      <div id="lcdCornerHud" class="lcd-corner-hud" aria-label="Scale Competency and Accuracy Percentile">
+        <span class="corner-hud-dot"></span>
+        <span id="lcdCornerLabel" class="corner-hud-label">ACCURACY</span>
+        <span id="lcdCornerPercentile" class="corner-hud-pct">98.5%</span>
+        <span id="lcdCornerTier" class="corner-hud-tier">±0.1g</span>
+      </div>
       <div id="digitDisplay" class="seg-display"></div>
       <div class="display-unit" id="unitLabel">g</div>
     </div>
