@@ -28,8 +28,8 @@ jobs:
         run: |
           echo "Checking project structure..."
           test -f index.html && echo "✓ index.html found" || echo "✗ index.html not found"
-          test -f public/manifest.json && echo "✓ manifest.json found" || echo "✗ manifest.json not found"
-          test -f public/sw.js && echo "✓ sw.js found" || echo "✗ sw.js not found"
+          test -f manifest.json && echo "✓ manifest.json found" || echo "✗ manifest.json not found"
+          test -f sw.js && echo "✓ sw.js found" || echo "✗ sw.js not found"
 
       - name: Setup Vercel environment
         run: |
