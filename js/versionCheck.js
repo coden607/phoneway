@@ -4,7 +4,7 @@
  * scripts/check-static.mjs enforces this in CI. */
 'use strict';
 
-var PHONEWAY_VERSION = '5.2.3';
+var PHONEWAY_VERSION = '5.2.4';
 var storedVersion = null;
 try { storedVersion = localStorage.getItem('phoneway_version'); } catch (e) {}
 

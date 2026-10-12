@@ -1609,13 +1609,96 @@ html, body {
 }
 .btn-ready:active { filter: brightness(0.8); animation: none; }
 
-/* ── Reading history dots ──────────────────────────────────── */
+/* ── Reading history scrollable tray ────────────────────────── */
 #readingHistory {
   display: flex;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 6px;
-  min-height: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 6px 10px 0 10px;
+  min-height: 22px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 3px 6px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 155, 56, 0.4) transparent;
+}
+#readingHistory:empty {
+  display: none;
+}
+#readingHistory::-webkit-scrollbar {
+  height: 3px;
+}
+#readingHistory::-webkit-scrollbar-thumb {
+  background: rgba(214, 155, 56, 0.4);
+  border-radius: 3px;
+}
+
+.history-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: rgba(214, 155, 56, 0.12);
+  border: 1px solid rgba(214, 155, 56, 0.35);
+  border-radius: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: #f2c86b;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+.history-chip:hover {
+  background: rgba(214, 155, 56, 0.25);
+  border-color: #f2c86b;
+  transform: translateY(-1px);
+}
+.history-chip:active {
+  transform: scale(0.96);
+}
+
+.btn-quick-history {
+  background: linear-gradient(135deg, rgba(80, 60, 20, 0.4) 0%, rgba(40, 30, 10, 0.6) 100%);
+  border: 1px solid rgba(214, 155, 56, 0.45);
+  color: #f2c86b;
+}
+.btn-quick-history:hover {
+  border-color: #f2c86b;
+  box-shadow: 0 0 10px rgba(242, 200, 107, 0.3);
+}
+
+.history-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #1a1a1a;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+}
+.history-item-row:last-child {
+  border-bottom: none;
+}
+.history-item-row:hover {
+  background: rgba(214, 155, 56, 0.08);
+}
+.history-row-time {
+  color: #666;
+  font-size: 9px;
+}
+.history-row-val {
+  color: #f2c86b;
+  font-weight: bold;
+}
+.history-row-grams {
+  color: #888;
+  font-size: 10px;
 }
 
 .reading-dot {

@@ -156,6 +156,7 @@ class PhonewayApp {
       }
       
       console.log('[Phoneway] UI initialized, binding buttons...');
+      this._loadReadingHistory();
       
       // Check device capabilities
       if (!DeviceCapabilities.hasDeviceMotion) {
@@ -307,6 +308,11 @@ class PhonewayApp {
     bind('stickyCornerBadge', () => { soundEffects.playKeyClick(); this._showCalModal(); });
     bind('lcdCornerHud', () => { soundEffects.playKeyClick(); this._showCalModal(); });
     bind('quickTareBtn', () => { soundEffects.playKeyClick(); this._tare(); });
+    bind('quickHistoryBtn', () => { soundEffects.playKeyClick(); this._showHistoryModal(); });
+    bind('historyClose', () => this._hideHistoryModal());
+    bind('historyDoneBtn', () => this._hideHistoryModal());
+    bind('historyClearBtn', () => this._clearHistory());
+    bind('historyCopyBtn', () => this._copyHistory());
     bind('quickHelpBtn', () => { soundEffects.playKeyClick(); this._showAccuracyGuide(); });
     bind('accuracyBlock', () => { soundEffects.playKeyClick(); this._showAccuracyGuide(); });
     bind('guideClose', () => this._hideAccuracyGuide());
@@ -719,20 +725,148 @@ class PhonewayApp {
     }
   }
 
+  _loadReadingHistory() {
+    this._readingHistoryList = [];
+    try {
+      const saved = localStorage.getItem('phoneway_reading_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          this._readingHistoryList = parsed.filter(item => item && Number.isFinite(item.grams));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load reading history:', e);
+    }
+    this._renderReadingHistory();
+  }
+
+  _saveReadingHistory() {
+    try {
+      if (this._readingHistoryList && this._readingHistoryList.length > 50) {
+        this._readingHistoryList = this._readingHistoryList.slice(0, 50);
+      }
+      localStorage.setItem('phoneway_reading_history', JSON.stringify(this._readingHistoryList || []));
+    } catch (e) {
+      console.warn('Failed to save reading history:', e);
+    }
+  }
+
   _addReadingHistory(grams) {
     if (!Number.isFinite(grams) || grams < 0.1) return;
     this._readingHistoryList = this._readingHistoryList || [];
     this._readingHistoryList.unshift({ grams, timestamp: Date.now() });
-    if (this._readingHistoryList.length > 5) {
+    if (this._readingHistoryList.length > 50) {
       this._readingHistoryList.pop();
     }
+    this._saveReadingHistory();
+    this._renderReadingHistory();
+    const overlay = document.getElementById('historyOverlay');
+    if (overlay && overlay.style.display !== 'none') {
+      this._populateHistoryModal();
+    }
+  }
+
+  _renderReadingHistory() {
     const container = document.getElementById('readingHistory');
     if (!container) return;
+    if (!this._readingHistoryList || this._readingHistoryList.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
     const u = UNITS[this.unitIdx];
-    container.innerHTML = this._readingHistoryList.map(item => {
+    container.innerHTML = this._readingHistoryList.slice(0, 25).map((item, idx) => {
       const val = (item.grams * u.factor).toFixed(u.places);
-      return `<span class="history-chip" style="display:inline-block;padding:2px 8px;margin:2px;background:rgba(214,155,56,0.15);border:1px solid rgba(214,155,56,0.4);border-radius:12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#f2c86b;" title="${item.grams.toFixed(2)}g at ${new Date(item.timestamp).toLocaleTimeString()}">${val}${u.label}</span>`;
+      const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return `<button class="history-chip" data-idx="${idx}" title="Reading #${idx + 1}: ${item.grams.toFixed(2)}g at ${timeStr}. Tap to open history.">${val}${u.label}</button>`;
     }).join(' ');
+
+    container.querySelectorAll('.history-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        soundEffects.playKeyClick();
+        this._showHistoryModal();
+      });
+    });
+  }
+
+  _showHistoryModal() {
+    const overlay = document.getElementById('historyOverlay');
+    if (!overlay) return;
+    this._populateHistoryModal();
+    overlay.style.display = 'block';
+  }
+
+  _hideHistoryModal() {
+    const overlay = document.getElementById('historyOverlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  _populateHistoryModal() {
+    const rowsEl = document.getElementById('historyRows');
+    const emptyEl = document.getElementById('historyEmpty');
+    const countEl = document.getElementById('historyCountLabel');
+    if (!rowsEl || !emptyEl || !countEl) return;
+
+    const list = this._readingHistoryList || [];
+    countEl.textContent = `${list.length} READINGS RECORDED`;
+
+    if (list.length === 0) {
+      emptyEl.style.display = 'block';
+      rowsEl.innerHTML = '';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    const u = UNITS[this.unitIdx];
+    rowsEl.innerHTML = list.map((item, idx) => {
+      const val = (item.grams * u.factor).toFixed(u.places);
+      const d = new Date(item.timestamp);
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const num = list.length - idx;
+      return `<div class="history-item-row">
+        <div>
+          <span class="history-row-val">${val} ${u.label}</span>
+          <span class="history-row-grams">(${item.grams.toFixed(2)}g)</span>
+        </div>
+        <div style="text-align:right">
+          <span class="history-row-time">#${num} · ${timeStr}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  _clearHistory() {
+    this._readingHistoryList = [];
+    this._saveReadingHistory();
+    this._renderReadingHistory();
+    this._populateHistoryModal();
+    this._showToast('🗑️ Measurement history cleared', 1500);
+  }
+
+  _copyHistory() {
+    const list = this._readingHistoryList || [];
+    if (list.length === 0) {
+      this._showToast('No history to copy', 1500);
+      return;
+    }
+    const u = UNITS[this.unitIdx];
+    const header = `Index,Timestamp,Grams,DisplayValue,Unit\n`;
+    const rows = list.map((item, idx) => {
+      const iso = new Date(item.timestamp).toISOString();
+      const val = (item.grams * u.factor).toFixed(u.places);
+      return `${idx + 1},${iso},${item.grams.toFixed(2)},${val},${u.label}`;
+    }).join('\n');
+    const text = header + rows;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this._showToast('📋 History copied to clipboard (CSV)', 2000);
+      }).catch(() => {
+        this._showToast('Copy failed, permission denied', 2000);
+      });
+    } else {
+      this._showToast('Clipboard not supported', 2000);
+    }
   }
 
   _updateSpiritLevel(x, y, z) {

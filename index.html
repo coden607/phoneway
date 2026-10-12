@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
   <title>PhoneWeigh v5.2 — Digital Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=5.2.3"/>
+  <link rel="manifest"          href="manifest.json?v=5.2.4"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=5.2.3"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.2.4"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,7 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script src="js/versionCheck.js?v=5.2.3"></script>
+<script src="js/versionCheck.js?v=5.2.4"></script>
 </head>
 <body>
 
@@ -177,12 +177,15 @@
       <button id="quickTareBtn" class="btn-quick-tare" aria-label="Zero Scale" title="Zero / Tare baseline at any time">
         <span class="btn-quick-icon">🎯</span> ZERO / TARE
       </button>
+      <button id="quickHistoryBtn" class="btn-quick-history" aria-label="Weighing History" title="View and scroll past measurement history">
+        <span class="btn-quick-icon">📜</span> HISTORY
+      </button>
       <button id="quickHelpBtn" class="btn-quick-help" aria-label="Setup Guide" title="Accuracy tips and setup instructions">
         <span class="btn-quick-icon">💡</span> TIPS
       </button>
     </div>
 
-    <!-- Reading history dots (last 5 stable readings) -->
+    <!-- Reading history scrollable tray -->
     <div id="readingHistory"></div>
   </div>
 
@@ -760,7 +763,7 @@
 </div>
 
 <!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
-<script src="js/errorTrap.js?v=5.2.3"></script>
+<script src="js/errorTrap.js?v=5.2.4"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -885,9 +888,39 @@
 </div>
 
 
+<!-- ══════════════════════════════════════════════════════════
+     MEASUREMENT HISTORY MODAL (Scrollable)
+═══════════════════════════════════════════════════════════ -->
+<div id="historyOverlay" class="verify-panel" style="display:none; max-height:86vh; overflow-y:auto">
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">MEASUREMENT HISTORY</div>
+      <div class="verify-sub">SCROLLABLE SESSION RECORD</div>
+    </div>
+    <button class="verify-close" id="historyClose">×</button>
+  </div>
+  <div style="padding:16px; font-size:11px; color:#ccc;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span id="historyCountLabel" style="color:#888; font-family:'Share Tech Mono',monospace;">0 READINGS RECORDED</span>
+      <div style="display:flex; gap:6px;">
+        <button id="historyCopyBtn" class="modal-btn modal-btn-secondary" style="padding:4px 10px; font-size:10px;">📋 COPY</button>
+        <button id="historyClearBtn" class="modal-btn modal-btn-secondary" style="padding:4px 10px; font-size:10px; color:#ff6b6b; border-color:rgba(255,107,107,0.4);">🗑️ CLEAR</button>
+      </div>
+    </div>
+    <div id="historyListContainer" class="history-scroll-list" style="max-height:48vh; overflow-y:auto; -webkit-overflow-scrolling:touch; border:1px solid #222; border-radius:6px; background:#0a0a0a; padding:6px;">
+      <div id="historyEmpty" style="padding:24px; text-align:center; color:#555;">No stable measurements recorded yet.<br><small style="color:#444">Weigh items to automatically log readings here.</small></div>
+      <div id="historyRows"></div>
+    </div>
+  </div>
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-secondary" id="historyDoneBtn">DONE</button>
+  </div>
+</div>
+
+
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=5.2.3"></script>
+<script type="module" src="js/app.js?v=5.2.4"></script>
 
 
 
