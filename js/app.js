@@ -40,6 +40,7 @@ import {
   calculateTiltAngle
 } from './scaleMath.js';
 import { soundEffects } from './soundEffects.js';
+import { VibrationResonanceChannel, SETTLE_MS, SAMPLE_WINDOW_MS } from './channels/vibration-resonance.js';
 
 const UNITS = UNITS_CONFIG;
 
@@ -1510,9 +1511,122 @@ class PhonewayApp {
     hapticFeedback([20]);
   }
 
-  _triggerHammer() {
-    this._showToast('Vibration analysis mode (simulated)', 2000);
-    hapticFeedback([50, 30, 50, 30, 100]);
+  /**
+   * HAMMER — real vibration-resonance cross-check per
+   * skills/extend-channel/SKILL.md (channel: vibration-resonance,
+   * js/channels/vibration-resonance.js). Excites the phone with
+   * vibrate() pulse trains, FFTs the accel magnitude ring, and reports
+   * the resonance-shift mass estimate.
+   * Honest: result is a cross-check toast, never a ledger claim.
+   */
+  _vibrationStorageAdapter() {
+    // VibrationResonanceChannel speaks localStorage; UniversalStorage
+    // speaks get/set. Bridge them.
+    return {
+      getItem: (k) => this.storage.get(k),
+      setItem: (k, v) => this.storage.set(k, v),
+    };
+  }
+
+  _getVibrationSensorAccess() {
+    return {
+      vibrate: (pattern) => {
+        try {
+          return (typeof navigator !== 'undefined' && navigator.vibrate)
+            ? navigator.vibrate(pattern) : false;
+        } catch (_) { return false; }
+      },
+      onMotion: (cb) => {
+        const handler = (e) => {
+          const a = (e.acceleration && e.acceleration.x != null)
+            ? e.acceleration
+            : e.accelerationIncludingGravity;
+          if (!a || a.x == null) return;
+          cb({ accelerationIncludingGravity: a });
+        };
+        window.addEventListener('devicemotion', handler, { passive: true });
+      },
+      offMotion: (cb) => {
+        window.removeEventListener('devicemotion', cb);
+      },
+    };
+  }
+
+  async _triggerHammer() {
+    if (this._hammerRunning) return;
+    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
+      this._showToast('Vibration resonance unavailable — no vibration API on this device', 3000);
+      return;
+    }
+
+    this._hammerRunning = true;
+    this._setState('HAMMER');
+    hapticFeedback([40]);
+    this._showToast('Vibration resonance — hold still', 2200);
+
+    const channel = new VibrationResonanceChannel({
+      storage: this._vibrationStorageAdapter(),
+    });
+
+    try {
+      if (!channel.start(this._getVibrationSensorAccess())) {
+        this._showToast('No accelerometer stream — vibration channel needs devicemotion', 3000);
+        return;
+      }
+
+      // Camera sync burst: when the camera channel is live, restrict its
+      // optical-flow analysis to the strike window for higher SNR.
+      let cam = null;
+      try {
+        const camSensor = this.backgroundFusion && this.backgroundFusion.camera;
+        cam = (camSensor && camSensor.active && typeof camSensor.beginHammerCapture === 'function')
+          ? camSensor : null;
+      } catch (_) { cam = null; }
+      if (cam) { try { cam.beginHammerCapture(); } catch (_) {} }
+
+      await delay(SETTLE_MS);          // ring fills with stillness samples
+      channel.excite();
+      this._updateSensorBar('hammerBar', 0.2);
+      await delay(SAMPLE_WINDOW_MS);   // excitation + capture window
+      if (cam) { try { cam.endHammerCapture(); } catch (_) {} }
+      this._updateSensorBar('hammerBar', 1);
+
+      const cal = channel.loadCalibration();
+      if (!cal) {
+        // First run on an empty phone: capture the no-load baseline.
+        const ok = channel.calibrateEmpty();
+        this._showToast(
+          ok
+            ? `Empty-phone resonance recorded — add weight and strike again`
+            : 'No usable resonance — softer surface, stiller phone, retry',
+          3400
+        );
+        return;
+      }
+
+      const est = channel.estimate();
+      if (!est) {
+        this._showToast('No usable resonance — softer surface, stiller phone, retry', 3000);
+        return;
+      }
+
+      let msg = `Resonance: ~${est.grams.toFixed(1)}g · conf ${(est.confidence * 100).toFixed(0)}%`;
+
+      // Cross-check feed: per extend-channel contract, secondary channels
+      // validate the primary estimate — they modulate confidence, never grams.
+      try {
+        if (this.backgroundFusion) this.backgroundFusion._feed('vibration', est.grams, est.confidence);
+      } catch (_) {}
+
+      this._showToast(msg, 4000);
+    } catch (e) {
+      try { this._showToast('Vibration analysis failed', 2500); } catch (_) {}
+    } finally {
+      try { channel.stop(); } catch (_) {}
+      setTimeout(() => this._updateSensorBar('hammerBar', 0), 800);
+      this._setState('READY');
+      this._hammerRunning = false;
+    }
   }
 
   async _precisionMeasure() {

@@ -26,8 +26,10 @@ notes = "Place phone face-up on a soft surface; gravity-axis deflection under lo
 [[channels]]
 id = "vibration-resonance"
 kind = "vibrator-frequency-shift"
-status = "placeholder"
-notes = "Cross-check path. Implement per skills/extend-channel; add evidence to the same ledger."
+status = "live"
+calibration = "js/channels/vibration.js::recordBaseline (no-load f_empty) + calibrate (known-weight fit for effective phone mass)"
+evidence = "localStorage:phoneway_v5_cal_vibration (baseline + phone mass) + same phoneway_v5_ledger for verifies"
+notes = "Cross-check path. navigator.vibrate() strike, devicemotion accel-magnitude ring-down, windowed FFT peak, m_added = m_phone·((f_empty/f_loaded)²−1). Confidence SNR-gated, capped 0.75; never a claim source. Wired to HAMMER button + backgroundFusion validator feed in js/app.js."
 
 [[channels]]
 id = "camera-deflection"

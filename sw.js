@@ -1,11 +1,11 @@
 /**
- * sw.js — Service Worker for Phoneway Scale v5.2.4
+ * sw.js — Service Worker for Phoneway Scale v5.3.0
  *
  * Caches ONLY the live module graph (dead modules removed 2026-10-08,
  * see docs/legacy/DEAD-CODE-2026-10-08.md).
  */
 
-const CACHE = 'phoneway-v5.2.4';
+const CACHE = 'phoneway-v5.3.0';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -33,6 +33,7 @@ const ASSETS = [
   BASE + 'js/swRegister.js',
   BASE + 'js/pwaInstall.js',
   BASE + 'js/app.js',
+  BASE + 'js/channels/vibration-resonance.js',
   BASE + 'data/error-logger.js',
   BASE + 'config/continuity.toml',
   BASE + 'icons/icon.svg',
