@@ -467,11 +467,15 @@ class PhonewayApp {
         }
         const deviations = this._calFlowReadings.map(value => Math.abs(value - stableReading)).sort((a, b) => a - b);
         const medianDeviation = deviations.length ? deviations[Math.floor(deviations.length / 2)] : Infinity;
-        const calibrationStable = this._calFlowReadings.length >= 20
-          && stableReading > 0.2
-          && medianDeviation <= Math.max(1.5, stableReading * 0.30)
+
+        // Check for physical deflection and sensor stillness
+        const deflection = this.scale.directionalProj.project(this.scale.maDx.mean, this.scale.maDy.mean);
+        const calibrationStable = this._calFlowReadings.length >= 15
+          && (stableReading > 0.08 || deflection > 0.0004)
+          && medianDeviation <= Math.max(1.5, stableReading * 0.35)
           && !this.scale.motionBlocked
           && confidence >= 0.05;
+
         if (calibrationStable) {
           this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
         } else {
@@ -479,27 +483,20 @@ class PhonewayApp {
         }
 
         if (status) {
-          status.textContent = calibrationStable ? "STABLE · " + stableReading.toFixed(2) + "g" : "HOLD STILL · " + stableReading.toFixed(2) + "g";
+          status.textContent = calibrationStable ? "STEADY · READY TO CALIBRATE" : "HOLD STILL · SETTLING...";
         }
 
         if (button) {
-          if (this._calFlowStableCount >= 20) {
-            const restoreCoreStable = this.scale.isStable;
-            const restoreMotionQuality = this.scale.motionQuality;
-            if (!isStable && calibrationStable) {
-              this.scale.isStable = true;
-              this.scale.motionQuality = Math.max(this.scale.motionQuality, 0.5);
-            }
+          if (this._calFlowStableCount >= 15) {
             this._calFlowLockedWeight = stableReading;
-            this.currentG = stableReading;
-            this._pendingCalibration = true;
-            this._tare();
-            this.scale.isStable = restoreCoreStable;
-            this.scale.motionQuality = restoreMotionQuality;
-            button.disabled = false;
-            button.textContent = this.scale.calibrated ? "DONE" : "CALIBRATE NOW";
             this._calFlowStep = 3;
-            if (status) status.textContent = this.scale.calibrated ? "CALIBRATED · " + stableReading.toFixed(2) + "g · TAP DONE" : "STABLE · " + stableReading.toFixed(2) + "g · TAP CALIBRATE NOW";
+            button.disabled = false;
+            button.textContent = "CALIBRATE NOW";
+            if (status) status.textContent = "STEADY · TAP CALIBRATE NOW";
+            const body = document.querySelector("#stepOverlay .step-body");
+            if (body) {
+              body.textContent = "STEP 3\n\nSteady lock detected!\n\nTap CALIBRATE NOW to lock sensitivity to " + this.calWeightG + "g.";
+            }
           } else {
             button.disabled = true;
             button.textContent = "WAITING FOR LOCK";
@@ -510,10 +507,20 @@ class PhonewayApp {
     }
 
     if (!this.scale.calibrated && !this._pendingCalibration) {
-      this.currentG = 0;
-      if (this.display) this.display.setValue(0);
-      this._updateAccuracyDisplay(0);
-      this._setState("CAL REQUIRED");
+      this.currentG = grams;
+      const u = UNITS[this.unitIdx];
+      if (this.display) {
+        this.display.setValue(grams * u.factor);
+      }
+      this._updateAccuracyDisplay(confidence);
+      this._setState(grams > 0.15 ? (isStable ? "STABLE (EST)" : "MEASURING") : "CAL REQUIRED");
+      if (this.stabBar) {
+        this.stabBar.set(Math.min(100, confidence * 100), isStable);
+      }
+      this._updateSensorBar("accelBar", confidence);
+      this._updateSurfaceLabel();
+      this._updateGradeLabel();
+      this._updatePrecisionLabel();
       return;
     }
 
@@ -798,7 +805,7 @@ class PhonewayApp {
       return;
     }
 
-    if (this._pendingCalibration && this.currentG > 0.2) {
+    if (this._pendingCalibration) {
       this._pendingCalibration = false;
 
       const result = this.scale.calibrate(this.calWeightG);
@@ -807,6 +814,7 @@ class PhonewayApp {
         try {
           telemetry.logCalibration(this.scale.sensitivity, this.scale.getSurfaceQuality(), points, 0);
         } catch {}
+        soundEffects.playPowerChime(true);
         this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
         hapticFeedback([30, 50, 30]);
 
@@ -970,20 +978,26 @@ class PhonewayApp {
         1: {
           body: "STEP 1\n\nClear the phone completely, then tap START TARE to zero the baseline.",
           status: "CLEAR THE PHONE",
-          progress: "33%",
+          progress: "25%",
           button: "START TARE"
         },
         2: {
-          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g weight on the phone and keep it still. The reading will unlock the next step when it settles.",
+          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g reference weight on the phone and keep it still. The reading will lock once steady.",
           status: "WAIT FOR LOCK",
-          progress: "66%",
+          progress: "50%",
           button: "WAITING FOR LOCK"
         },
         3: {
-          body: "STEP 3\n\nThe reading is steady. Tap CALIBRATE NOW to save this weight into the calibration curve.",
-          status: "READY TO SAVE",
-          progress: "100%",
+          body: "STEP 3\n\nSteady lock detected! Tap CALIBRATE NOW to calibrate sensitivity to " + this.calWeightG + "g.",
+          status: "READY TO CALIBRATE",
+          progress: "75%",
           button: "CALIBRATE NOW"
+        },
+        4: {
+          body: "CALIBRATION COMPLETE!\n\n👉 Remove the " + this.calWeightG + "g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.",
+          status: "REMOVE WEIGHT · TAP DONE",
+          progress: "100%",
+          button: "DONE"
         }
       };
       const cfg = steps[step];
@@ -1006,42 +1020,50 @@ class PhonewayApp {
         await this.scale.tare();
         this._calFlowStep = 2;
         this._calFlowStableCount = 0;
-    this._calFlowReadings = [];
-    this._calFlowLockedWeight = null;
+        this._calFlowReadings = [];
+        this._calFlowLockedWeight = null;
         render(2);
         return;
       }
 
       if (this._calFlowStep === 3) {
-        if (this.scale.calibrated) {
-          overlay.classList.remove("show");
-          overlay.style.display = "none";
-          this._calFlowActive = false;
-          this._calFlowStep = 0;
-          this._pendingCalibration = false;
-          this._setState("READY");
-          button.onclick = null;
-          return;
-        }
-        this._pendingCalibration = true;
-        status.textContent = "CALIBRATING...";
         button.disabled = true;
-        await this._tare();
-        if (this.scale.calibrated) {
-          overlay.classList.remove("show");
-          overlay.style.display = "none";
-          this._calFlowActive = false;
-          this._calFlowStep = 0;
-          this._pendingCalibration = false;
-          this._setState("READY");
-          button.onclick = null;
+        status.textContent = "CALIBRATING...";
+        const res = this.scale.calibrate(this.calWeightG);
+        if (res.success) {
+          soundEffects.playPowerChime(true);
+          hapticFeedback([30, 50, 30]);
+          this._calFlowStep = 4;
+          render(4);
+          this._updateCalibrationGuide();
+          return;
         } else {
+          status.textContent = "CALIBRATION FAILED";
+          body.textContent = "Calibration error: " + res.error + "\n\nTip: Place phone on a mouse pad, folded cloth, or fulcrum so the weight creates a detectable tilt.";
+          button.disabled = false;
+          button.textContent = "RETRY STEP 2";
           this._calFlowStep = 2;
           this._calFlowStableCount = 0;
-    this._calFlowReadings = [];
-    this._calFlowLockedWeight = null;
-          render(2);
+          this._calFlowReadings = [];
+          return;
         }
+      }
+
+      if (this._calFlowStep === 4) {
+        button.disabled = true;
+        status.textContent = "ZEROING...";
+        overlay.classList.remove("show");
+        overlay.style.display = "none";
+        this._calFlowActive = false;
+        this._calFlowStep = 0;
+        this._pendingCalibration = false;
+        await this.scale.tare();
+        this._setState("READY");
+        if (this.display) this.display.setValue(0);
+        this._showToast("Calibrated to 0.1g! Scale ready to weigh.", 4000);
+        soundEffects.playBeepStable();
+        button.onclick = null;
+        return;
       }
     };
   }

@@ -109,7 +109,28 @@ console.log('🧪 Testing PhoneWeigh 0.1g Precision Math...\n');
 
   console.log('✔ 6 Standard scale units (g, oz, ct, gn, dwt, ozt) verified.');
   console.log('✔ PCS pieces counting verified.');
-  console.log('✔ Digital spirit level leveling math verified.');
+  console.log('✔ Digital spirit level leveling math verified.\n');
+}
+
+// 5. Test 360° Omnidirectional Deflection & Weighing Symmetry
+{
+  const proj = new DirectionalProjection();
+  // Calibrate with 5.0g at (0.025, 0.025) (45 degree diagonal)
+  proj.setCalibrationVector(0.025, 0.025);
+  const calDelta = proj.project(0.025, 0.025);
+  const sens = 5.0 / calDelta;
+
+  // Test placing identical mass in all 8 cardinal directions and diagonals
+  const radius = Math.hypot(0.025, 0.025);
+  const testAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, 5*Math.PI/4, 3*Math.PI/2, 7*Math.PI/4];
+  for (const angle of testAngles) {
+    const dx = radius * Math.cos(angle);
+    const dy = radius * Math.sin(angle);
+    const measuredDelta = proj.project(dx, dy);
+    const measuredGrams = measuredDelta * sens;
+    assert.ok(Math.abs(measuredGrams - 5.0) < 0.01, `Angle ${(angle*180/Math.PI).toFixed(0)}° must weigh 5.0g ±0.01g (got ${measuredGrams.toFixed(3)}g)`);
+  }
+  console.log('✔ 360° Omnidirectional weighing symmetry verified across all 8 cardinal/diagonal angles.');
 }
 
 console.log('\n🎉 ALL 0.1g ACCURACY & DIGITAL SCALE FEATURE CHECKS PASSED!');

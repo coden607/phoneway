@@ -33,7 +33,7 @@ class SimpleScale {
     this.calibrationAgeMs = 0;
     this.baseline = null;
     this.sensitivity = 150;
-    this.directionalProj = new DirectionalProjection();
+    this.directionalProj = new DirectionalProjection(0.0003);
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
     this.tiltCorrector = new TiltCorrector();
@@ -349,7 +349,7 @@ class SimpleScale {
   calibrate(knownGrams) {
     if (!Number.isFinite(knownGrams) || knownGrams <= 0) return { success: false, error: 'Choose a valid reference weight' };
     if (!this.baseline) return { success: false, error: 'Must tare first' };
-    if (this.maDx.length < 20) return { success: false, error: 'Still settling - wait a moment' };
+    if (this.maDx.length < 15) return { success: false, error: 'Still settling - wait a moment' };
     if (this.motionBlocked && this.motionQuality < 0.25) return { success: false, error: 'Hold the phone still and try again' };
     // Lock directional tilt vector from calibrated reference load
     this.directionalProj.setCalibrationVector(this.maDx.mean, this.maDy.mean);
@@ -545,7 +545,8 @@ class SimpleScale {
         directionalProj: {
           unitX: this.directionalProj.unitX,
           unitY: this.directionalProj.unitY,
-          isCalibrated: this.directionalProj.isCalibrated
+          isCalibrated: this.directionalProj.isCalibrated,
+          noiseFloor: this.directionalProj.noiseFloor
         },
         multiCal: { points: this.multiCal.points, degree: this.multiCal.degree },
         verificationHistory: this.verificationHistory, timestamp: Date.now()
@@ -561,16 +562,19 @@ class SimpleScale {
       if (!saved && window._phonewayCal) saved = JSON.stringify(window._phonewayCal);
       if (!saved) return false;
       const cal = JSON.parse(saved);
-      if (!(cal.sensitivity && cal.baseline)) return false;
+      if (!cal.sensitivity) return false;
       this.calibrationAgeMs = cal.timestamp ? Math.max(0, Date.now() - cal.timestamp) : 0;
       this.calibrationStale = this.calibrationAgeMs > 30 * 24 * 60 * 60 * 1000;
       this.sensitivity = cal.sensitivity;
-      this.baseline = cal.baseline;
+      // Stale accelerometer baselines must never be restored across reloads.
+      // Every session requires a live zero baseline captured when placed on surface.
+      this.baseline = null;
       this.calibrated = cal.calibrated || false;
       if (cal.directionalProj) {
         this.directionalProj.unitX = cal.directionalProj.unitX || 0;
         this.directionalProj.unitY = cal.directionalProj.unitY || 1;
         this.directionalProj.isCalibrated = cal.directionalProj.isCalibrated || false;
+        if (cal.directionalProj.noiseFloor != null) this.directionalProj.noiseFloor = cal.directionalProj.noiseFloor;
       }
       if (cal.multiCal) {
         this.multiCal.points = cal.multiCal.points || [];

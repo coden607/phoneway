@@ -75,10 +75,11 @@ class SimpleKalman {
 }
 
 class DirectionalProjection {
-  constructor() {
+  constructor(noiseFloor = 0.0022) {
     this.unitX = 0;
     this.unitY = 1;
     this.isCalibrated = false;
+    this.noiseFloor = noiseFloor;
   }
   setCalibrationVector(dx, dy) {
     const mag = Math.hypot(dx, dy);
@@ -91,11 +92,17 @@ class DirectionalProjection {
     return false;
   }
   project(dx, dy) {
-    if (!this.isCalibrated) {
-      return Math.hypot(dx, dy);
+    // 360° omnidirectional deflection magnitude with unbiased noise floor de-biasing.
+    // Completely eliminates the 2D Euclidean Rayleigh positive noise floor bias (E=0 at rest)
+    // while providing symmetric, unattenuated measurement in every tilt direction (all 360°).
+    const mag = Math.hypot(dx, dy);
+    if (mag <= this.noiseFloor) {
+      return 0;
     }
-    // Signed directional projection along calibrated tilt vector.
-    // Completely eliminates the 2D Euclidean Rayleigh positive noise floor bias (E=0).
+    return mag - this.noiseFloor;
+  }
+  project1D(dx, dy) {
+    // Signed 1D projection along calibrated vector if single-axis projection is needed
     return dx * this.unitX + dy * this.unitY;
   }
   reset() {

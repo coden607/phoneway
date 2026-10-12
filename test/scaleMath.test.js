@@ -109,3 +109,32 @@ describe('digital spirit level tilt math', () => {
     expect(excessive.isAcceptable).toBe(false);
   });
 });
+
+describe('360° omnidirectional weighing symmetry and noise rejection', () => {
+  it('weighs identically regardless of tilt direction or placement angle', async () => {
+    const { DirectionalProjection } = await import('../js/scaleMath.js');
+    const proj = new DirectionalProjection();
+    // Calibrate with 5.0g along (0.02, 0.02)
+    proj.setCalibrationVector(0.02, 0.02);
+    const calDelta = proj.project(0.02, 0.02);
+    const sens = 5.0 / calDelta;
+
+    const r = Math.hypot(0.02, 0.02);
+    // Test 12 angles around full 360° circle (every 30°)
+    for (let deg = 0; deg < 360; deg += 30) {
+      const rad = deg * Math.PI / 180;
+      const dx = r * Math.cos(rad);
+      const dy = r * Math.sin(rad);
+      const measuredG = proj.project(dx, dy) * sens;
+      expect(measuredG).toBeCloseTo(5.0, 2);
+    }
+  });
+
+  it('de-biases rest noise floor to prevent positive ghost weight', async () => {
+    const { DirectionalProjection } = await import('../js/scaleMath.js');
+    const proj = new DirectionalProjection();
+    // Rest noise below threshold returns exact 0
+    expect(proj.project(0.001, 0.001)).toBe(0);
+    expect(proj.project(0, 0)).toBe(0);
+  });
+});
