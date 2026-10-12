@@ -3,8 +3,8 @@
   "name": "PhoneWeigh Digital Scale v5.2",
   "short_name": "PhoneWeigh",
   "description": "PhoneWeigh — Digital precision scale for your phone. Resolution 0.1g · Accuracy = your calibration result (typically ±0.1g; see the in-app Verification Ledger). Weigh by verified measurement, not marketing.",
-  "version": "5.2.1",
-  "start_url": "./?v=5.2.1",
+  "version": "5.2.2",
+  "start_url": "./?v=5.2.2",
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
@@ -85,28 +85,28 @@
     {
       "name": "⚡ Quick Weigh",
       "short_name": "Weigh",
-      "url": "./?mode=ultra&v=5.2.1",
+      "url": "./?mode=ultra&v=5.2.2",
       "description": "Start weighing immediately",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "⚖️ Calibrate",
       "short_name": "Calibrate",
-      "url": "./?cal=true&v=5.2.1",
+      "url": "./?cal=true&v=5.2.2",
       "description": "Calibrate with a known weight for your device and surface",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "📊 Accuracy Report",
       "short_name": "Stats",
-      "url": "./?view=stats&v=5.2.1",
+      "url": "./?view=stats&v=5.2.2",
       "description": "View your verification ledger and measured accuracy",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "🔬 Verify",
       "short_name": "Verify",
-      "url": "./?verify=true&v=5.2.1",
+      "url": "./?verify=true&v=5.2.2",
       "description": "Measure a known reference weight and add evidence to your ledger",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     }

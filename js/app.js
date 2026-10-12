@@ -487,6 +487,10 @@ class PhonewayApp {
         const autoLock = (this._calFlowStableCount >= stableTarget) || (elapsed > 3000 && hasMinSamples);
 
         if (autoLock) {
+          if (this._calStep2Interval) {
+            clearInterval(this._calStep2Interval);
+            this._calStep2Interval = null;
+          }
           this._calFlowLockedWeight = stableReading;
           this._calFlowStep = 3;
           if (button) {
@@ -973,6 +977,21 @@ class PhonewayApp {
   }
 
   async _startCalibration() {
+    if (!this.powered) {
+      if (this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
+        const permitted = await this._requestPermissions();
+        this._awaitingMotionPermission = !permitted;
+      }
+      this.powered = true;
+      if (this.ledPower) this.ledPower.on('green');
+      try {
+        this.scale.start();
+        this.backgroundFusion.start().catch(() => {});
+      } catch (e) {
+        console.error('Scale start error:', e);
+      }
+    }
+
     const onboardModal2 = document.getElementById("onboardModal");
     if (onboardModal2 && onboardModal2.style) onboardModal2.style.display = "none";
 
@@ -1011,10 +1030,10 @@ class PhonewayApp {
           button: "START TARE"
         },
         2: {
-          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g reference weight on the phone and keep it still. The reading will lock once steady.",
-          status: "WAIT FOR LOCK",
+          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g reference weight on the phone and keep it still.\n\nReading will lock automatically, or tap LOCK to calibrate.",
+          status: "PLACE WEIGHT · HOLD STILL",
           progress: "50%",
-          button: "WAITING FOR LOCK"
+          button: "HOLD STILL..."
         },
         3: {
           body: "STEP 3\n\nSteady lock detected! Tap CALIBRATE NOW to calibrate sensitivity to " + this.calWeightG + "g.",
@@ -1044,6 +1063,10 @@ class PhonewayApp {
     const closeBtn = document.getElementById("stepOverlayClose");
     if (closeBtn) {
       closeBtn.onclick = () => {
+        if (this._calStep2Interval) {
+          clearInterval(this._calStep2Interval);
+          this._calStep2Interval = null;
+        }
         overlay.classList.remove("show");
         overlay.style.display = "none";
         this._calFlowActive = false;
@@ -1064,10 +1087,44 @@ class PhonewayApp {
         this._calFlowReadings = [];
         this._calFlowLockedWeight = null;
         render(2);
+
+        // Active interval: guarantees the button unlocks and updates every 100ms
+        if (this._calStep2Interval) clearInterval(this._calStep2Interval);
+        this._calStep2Interval = setInterval(() => {
+          if (this._calFlowStep !== 2) {
+            clearInterval(this._calStep2Interval);
+            this._calStep2Interval = null;
+            return;
+          }
+          const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
+          const stableTarget = 8;
+          const count = this._calFlowStableCount || 0;
+          if (elapsed > 1200) {
+            if (button) {
+              button.disabled = false;
+              button.textContent = `LOCK ${this.calWeightG}g & CALIBRATE (TAP)`;
+            }
+            if (status) {
+              status.textContent = `SETTLING (${Math.min(stableTarget, count)}/${stableTarget}) · OR TAP TO LOCK`;
+            }
+          } else {
+            if (button) {
+              button.disabled = true;
+              button.textContent = `HOLD STILL (${Math.min(stableTarget, count)}/${stableTarget})...`;
+            }
+            if (status) {
+              status.textContent = "HOLD STILL · SETTLING...";
+            }
+          }
+        }, 100);
         return;
       }
 
       if (this._calFlowStep === 2 || this._calFlowStep === 3) {
+        if (this._calStep2Interval) {
+          clearInterval(this._calStep2Interval);
+          this._calStep2Interval = null;
+        }
         button.disabled = true;
         status.textContent = "CALIBRATING...";
         body.textContent = "Locking sensitivity for " + this.calWeightG + "g. Keep phone still...";
