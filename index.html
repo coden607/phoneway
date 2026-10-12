@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
   <title>PhoneWeigh v5.2 — Digital Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=5.2.2"/>
+  <link rel="manifest"          href="manifest.json?v=5.2.3"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=5.2.2"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.2.3"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,7 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script src="js/versionCheck.js?v=5.2.2"></script>
+<script src="js/versionCheck.js?v=5.2.3"></script>
 </head>
 <body>
 
@@ -108,6 +108,9 @@
         <div class="brand-name">PHONEWEIGH</div>
       </div>
       <div class="brand-sub">PRECISION DIGITAL SCALE · SENSOR FUSION</div>
+      <div class="header-cal-wrap">
+        <button id="headerCalBtn" class="header-cal-chip" aria-label="Calibrate Scale at any time" title="Tap to calibrate at any time">⚖️ CAL</button>
+      </div>
     </div>
 
     <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
@@ -164,6 +167,19 @@
         <span class="spirit-badge">SPIRIT LEVEL</span>
         <span id="spiritAngle" class="spirit-angle">0.0° · LEVEL</span>
       </div>
+    </div>
+
+    <!-- ── Quick Action Bar (Calibrate Anytime & Quick Tare) ── -->
+    <div id="quickActionBar" class="quick-action-strip">
+      <button id="quickCalBtn" class="btn-quick-cal pulse" aria-label="Calibrate Scale at any time" title="Calibrate scale with reference weight at any time">
+        <span class="btn-quick-icon">⚖️</span> CALIBRATE
+      </button>
+      <button id="quickTareBtn" class="btn-quick-tare" aria-label="Zero Scale" title="Zero / Tare baseline at any time">
+        <span class="btn-quick-icon">🎯</span> ZERO / TARE
+      </button>
+      <button id="quickHelpBtn" class="btn-quick-help" aria-label="Setup Guide" title="Accuracy tips and setup instructions">
+        <span class="btn-quick-icon">💡</span> TIPS
+      </button>
     </div>
 
     <!-- Reading history dots (last 5 stable readings) -->
@@ -506,17 +522,32 @@
      RE-CALIBRATE OVERLAY
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="calOverlay" style="display:none">
-  <div class="modal-card">
-    <div class="modal-title">PRECISION CALIBRATION</div>
-    <div class="modal-sub">SELECT A REFERENCE WEIGHT</div>
-    <p style="font-size:9px;line-height:1.8;color:#888;letter-spacing:1px;margin-bottom:16px">
-      Two-point calibration works best with certified weights.
-      If you do not have them, use a nickel (5.0 g) + dollar bill (1.0 g) combination.
+  <div class="modal-card cal-modal-card">
+    <div class="modal-header-row">
+      <div class="modal-title">⚖️ PRECISION CALIBRATION</div>
+      <button id="calCloseXBtn" class="verify-close" aria-label="Close calibration">×</button>
+    </div>
+    <div class="modal-sub">CALIBRATE AT ANY TIME · 0.1g RESOLUTION</div>
+    <p class="cal-modal-hint">
+      🎯 Best accuracy: Place phone on a mouse pad, folded cloth, or pen fulcrum. Tap any reference below to calibrate:
     </p>
+
+    <!-- Reference weight selection chips -->
     <div id="recalWeightList" class="recal-weight-list"></div>
-    <div class="modal-btns">
-      <button class="modal-btn modal-btn-primary" id="calConfirmBtn">PROCEED</button>
-      <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>
+
+    <!-- Custom weight input -->
+    <div class="custom-weight-row cal-custom-box">
+      <label for="recalCustomGrams">CUSTOM GRAMS:</label>
+      <input type="number" id="recalCustomGrams" min="0.1" max="500" step="0.01" value="5.00" inputmode="decimal"/>
+      <button type="button" id="recalCustomBtn" class="modal-btn-inline">USE</button>
+    </div>
+
+    <!-- Quick action buttons -->
+    <div class="cal-action-grid">
+      <button class="modal-btn modal-btn-primary" id="calConfirmBtn">⚡ QUICK CAL (5.0g)</button>
+      <button class="modal-btn modal-btn-accent" id="calDirectCurrentBtn">📍 CALIBRATE CURRENT LOAD</button>
+      <button class="modal-btn modal-btn-secondary" id="calGuidedBtn">📖 GUIDED WALKTHROUGH</button>
+      <button class="modal-btn modal-btn-secondary" id="calQuickTareBtn">🎯 ZERO / TARE ONLY</button>
     </div>
 
     <!-- Factory reset section -->
@@ -729,7 +760,7 @@
 </div>
 
 <!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
-<script src="js/errorTrap.js?v=5.2.2"></script>
+<script src="js/errorTrap.js?v=5.2.3"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -856,7 +887,7 @@
 
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=5.2.2"></script>
+<script type="module" src="js/app.js?v=5.2.3"></script>
 
 
 

@@ -138,3 +138,39 @@ describe('360° omnidirectional weighing symmetry and noise rejection', () => {
     expect(proj.project(0, 0)).toBe(0);
   });
 });
+
+describe('anytime recalibration & sensitivity adaptation', () => {
+  it('instantly locks sensitivity on recalibration without retaining stale surface bias', async () => {
+    const { SimpleScale } = await import('../js/simpleScale.js');
+    const scale = new SimpleScale();
+    scale.baseline = { x: 0, y: 0, z: 9.8 };
+    scale.filteredAccel = { x: 0, y: 0.025, z: 9.8 };
+
+    // Initial cal with 5g
+    const res1 = scale.calibrate(5.0);
+    expect(res1.success).toBe(true);
+    expect(scale.calibrated).toBe(true);
+    const sens1 = scale.sensitivity;
+
+    // Simulate surface change (phone moved to softer mouse pad: 2x deflection for same 5g)
+    scale.filteredAccel = { x: 0, y: 0.050, z: 9.8 };
+    const res2 = scale.calibrate(5.0);
+    expect(res2.success).toBe(true);
+    // New sensitivity should immediately adapt to the new surface deflection
+    const expectedSens = 5.0 / scale.directionalProj.project(0, 0.050);
+    expect(scale.sensitivity).toBeCloseTo(expectedSens, 1);
+  });
+
+  it('supports direct in-place calibration with custom reference mass', async () => {
+    const { SimpleScale } = await import('../js/simpleScale.js');
+    const scale = new SimpleScale();
+    scale.baseline = { x: 0, y: 0, z: 9.8 };
+    scale.filteredAccel = { x: 0, y: 0.010, z: 9.8 };
+
+    // Direct cal with 1.0g dollar bill
+    const resBill = scale.calibrate(1.0);
+    expect(resBill.success).toBe(true);
+    expect(scale.displayWeight).toBe(1.0);
+  });
+});
+

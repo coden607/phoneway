@@ -356,7 +356,9 @@ class SimpleScale {
     }
     const curDx = this.filteredAccel.x - (this.baseline ? this.baseline.x : 0);
     const curDy = this.filteredAccel.y - (this.baseline ? this.baseline.y : 0);
-    while (this.maDx.length < 8) {
+    this.maDx.reset();
+    this.maDy.reset();
+    for (let i = 0; i < 8; i++) {
       this.maDx.update(curDx);
       this.maDy.update(curDy);
     }
@@ -382,7 +384,7 @@ class SimpleScale {
       this.multiCal.addPoint(knownGrams, deltaA);
     }
     const newSensitivity = knownGrams / deltaA;
-    this.sensitivity = this.calibrated ? 0.7 * newSensitivity + 0.3 * this.sensitivity : newSensitivity;
+    this.sensitivity = newSensitivity;
     this.calibrated = true;
     this.emaWeight.reset();
     this.stabilityCheck.reset();

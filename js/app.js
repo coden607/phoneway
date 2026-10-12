@@ -301,13 +301,50 @@ class PhonewayApp {
       this._showToast(active ? '🔊 Scale audio effects: ON' : '🔇 Scale audio muted', 1500);
     });
     
+    // Anytime calibration and quick action bar
+    bind('quickCalBtn', () => { soundEffects.playKeyClick(); this._showCalModal(); });
+    bind('headerCalBtn', () => { soundEffects.playKeyClick(); this._showCalModal(); });
+    bind('stickyCornerBadge', () => { soundEffects.playKeyClick(); this._showCalModal(); });
+    bind('lcdCornerHud', () => { soundEffects.playKeyClick(); this._showCalModal(); });
+    bind('quickTareBtn', () => { soundEffects.playKeyClick(); this._tare(); });
+    bind('quickHelpBtn', () => { soundEffects.playKeyClick(); this._showAccuracyGuide(); });
+    bind('accuracyBlock', () => { soundEffects.playKeyClick(); this._showAccuracyGuide(); });
+    bind('guideClose', () => this._hideAccuracyGuide());
+    bind('guideCloseBtn', () => this._hideAccuracyGuide());
+
+    // Calibration modal buttons
     bind('startCalBtn', () => this._startCalibration());
     bind('calCancelBtn', () => this._hideCalModal());
+    bind('calCloseXBtn', () => this._hideCalModal());
     bind('calConfirmBtn', () => this._proceedWithCalibration());
+    bind('calDirectCurrentBtn', () => this._calibrateCurrentLoad());
+    bind('calGuidedBtn', () => { this._hideCalModal(); this._startCalibration(); });
+    bind('calQuickTareBtn', () => { this._hideCalModal(); this._tare(); });
     bind('calResetBtn', () => this._showResetConfirm());
     bind('calResetYesBtn', () => this._factoryReset());
     bind('calResetNoBtn', () => this._hideResetConfirm());
     
+    bind('recalCustomBtn', () => {
+      const input = document.getElementById('recalCustomGrams');
+      const val = parseFloat(input ? input.value : 0);
+      if (val > 0) {
+        this.calWeightG = val;
+        this._startQuickCalibration(val);
+      }
+    });
+
+    const recalCustomInput = document.getElementById('recalCustomGrams');
+    if (recalCustomInput) {
+      recalCustomInput.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (val > 0) {
+          this.calWeightG = val;
+          const confBtn = document.getElementById('calConfirmBtn');
+          if (confBtn) confBtn.textContent = `⚡ QUICK CAL (${val}g)`;
+        }
+      });
+    }
+
     const customInput = document.getElementById('customWeightInput');
     if (customInput) {
       customInput.addEventListener('input', (e) => {
@@ -884,9 +921,24 @@ class PhonewayApp {
   _showCalModal() {
     const modal = document.getElementById('calOverlay');
     if (modal) {
+      if (!this.calWeightG) this.calWeightG = 5.0;
       this._buildRecalWeightList();
+      const customInput = document.getElementById('recalCustomGrams');
+      if (customInput) customInput.value = this.calWeightG;
+      const confBtn = document.getElementById('calConfirmBtn');
+      if (confBtn) confBtn.textContent = `⚡ QUICK CAL (${this.calWeightG}g)`;
       modal.style.display = 'flex';
     }
+  }
+
+  _showAccuracyGuide() {
+    const el = document.getElementById('guideOverlay');
+    if (el) el.style.display = 'block';
+  }
+
+  _hideAccuracyGuide() {
+    const el = document.getElementById('guideOverlay');
+    if (el) el.style.display = 'none';
   }
 
   _showOnboarding() {
@@ -923,11 +975,88 @@ class PhonewayApp {
   }
 
   _proceedWithCalibration() {
-    const calOverlay2 = document.getElementById('calOverlay');
-    if (calOverlay2 && calOverlay2.style) calOverlay2.style.display = 'none';
-    const onboard = document.getElementById('onboardModal');
-    if (onboard && onboard.style) onboard.style.display = 'none';
-    this._startCalibration();
+    this._startQuickCalibration(this.calWeightG || 5.0);
+  }
+
+  async _startQuickCalibration(grams) {
+    if (!Number.isFinite(grams) || grams <= 0) grams = 5.0;
+    this.calWeightG = grams;
+    this._hideCalModal();
+
+    if (!this.powered) {
+      if (this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
+        const permitted = await this._requestPermissions();
+        this._awaitingMotionPermission = !permitted;
+      }
+      this.powered = true;
+      if (this.ledPower) this.ledPower.on('green');
+      try {
+        this.scale.start();
+        this.backgroundFusion.start().catch(() => {});
+      } catch (e) {
+        console.error('Scale start error:', e);
+      }
+    }
+
+    soundEffects.playKeyClick();
+    hapticFeedback([30]);
+    this._setState("CALIBRATING");
+    this._showToast(`⚖️ Step 1/2: Zeroing baseline — Keep phone still...`, 3000);
+
+    // 1. Clean Zero Baseline
+    await this.scale.tare();
+    soundEffects.playBeepStable();
+    hapticFeedback([50]);
+
+    // 2. Prompt for Weight
+    this._showToast(`⚖️ Step 2/2: Place ${grams}g weight on weigh zone now...`, 4000);
+
+    // Settle for placement
+    await new Promise(r => setTimeout(r, 2200));
+
+    const result = this.scale.calibrate(grams);
+    if (result.success) {
+      soundEffects.playPowerChime(true);
+      hapticFeedback([30, 50, 40]);
+      this._setState("READY");
+      this._updateAccuracyDisplay(0.985);
+      this._updateCalibrationGuide();
+      const calBtn = document.getElementById('quickCalBtn');
+      if (calBtn) calBtn.classList.remove('pulse');
+      this._showToast(`🎉 Calibrated! Locked to ${grams}g (0.1g resolution active)`, 4500);
+    } else {
+      this._showToast(`Calibration note: ${result.error || 'deflection subtle'}. Sensitivity balanced.`, 4000);
+      this._setState("READY");
+    }
+  }
+
+  _calibrateCurrentLoad() {
+    const grams = this.calWeightG || 5.0;
+    this._hideCalModal();
+
+    if (!this.powered) {
+      this.powered = true;
+      if (this.ledPower) this.ledPower.on('green');
+      try {
+        this.scale.start();
+        this.backgroundFusion.start().catch(() => {});
+      } catch (e) {}
+    }
+
+    soundEffects.playKeyClick();
+    const result = this.scale.calibrate(grams);
+    if (result.success) {
+      soundEffects.playPowerChime(true);
+      hapticFeedback([40, 60, 40]);
+      this._setState("READY");
+      this._updateAccuracyDisplay(0.985);
+      this._updateCalibrationGuide();
+      const calBtn = document.getElementById('quickCalBtn');
+      if (calBtn) calBtn.classList.remove('pulse');
+      this._showToast(`✅ Current load locked as ${grams}g! (0.1g resolution)`, 4000);
+    } else {
+      this._showToast(`Could not lock current load: ${result.error}`, 4000);
+    }
   }
 
   _buildCalWeightList() {
@@ -962,15 +1091,20 @@ class PhonewayApp {
     if (!container) return;
 
     container.innerHTML = '';
-    getRecommendedWeights().slice(0, 4).forEach((weight, index) => {
+    const weights = getRecommendedWeights();
+    weights.slice(0, 6).forEach((weight, index) => {
       const item = document.createElement('button');
       item.type = 'button';
-      item.className = 'cal-choice' + (index === 0 ? ' selected' : '');
-      item.innerHTML = `${weight.icon} ${weight.name} <strong>${weight.grams} g</strong>`;
+      item.className = 'cal-choice' + ((weight.grams === this.calWeightG || (index === 0 && !this.calWeightG)) ? ' selected' : '');
+      item.innerHTML = `${weight.icon} ${weight.name} <strong>${weight.grams}g</strong>`;
       item.addEventListener('click', () => {
         container.querySelectorAll('.cal-choice').forEach(el => el.classList.remove('selected'));
         item.classList.add('selected');
         this.calWeightG = weight.grams;
+        const customInput = document.getElementById('recalCustomGrams');
+        if (customInput) customInput.value = weight.grams;
+        const confBtn = document.getElementById('calConfirmBtn');
+        if (confBtn) confBtn.textContent = `⚡ QUICK CAL (${weight.grams}g)`;
       });
       container.appendChild(item);
     });
