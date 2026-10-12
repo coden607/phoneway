@@ -890,11 +890,8 @@ class PhonewayApp {
     const calOverlay2 = document.getElementById('calOverlay');
     if (calOverlay2 && calOverlay2.style) calOverlay2.style.display = 'none';
     const onboard = document.getElementById('onboardModal');
-    if (onboard) {
-      onboard.style.display = 'flex';
-    } else {
-      this._startCalibration();
-    }
+    if (onboard && onboard.style) onboard.style.display = 'none';
+    this._startCalibration();
   }
 
   _buildCalWeightList() {
