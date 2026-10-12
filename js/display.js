@@ -25,6 +25,20 @@ const SEG = {
   'n': [0,0,1,0,1,0,1],
   'H': [0,1,1,0,1,1,1],
   'd': [0,1,1,1,1,0,1],
+  'P': [1,1,0,0,1,1,1],
+  'p': [1,1,0,0,1,1,1],
+  'C': [1,0,0,1,1,1,0],
+  'c': [0,0,0,1,1,0,1],
+  'S': [1,0,1,1,0,1,1],
+  's': [1,0,1,1,0,1,1],
+  'A': [1,1,1,0,1,1,1],
+  'a': [1,1,1,1,1,0,1],
+  'b': [0,0,1,1,1,1,1],
+  't': [0,0,0,1,1,1,1],
+  'F': [1,0,0,0,1,1,1],
+  'U': [0,1,1,1,1,1,0],
+  'u': [0,0,1,1,1,0,0],
+  'y': [0,1,1,1,0,1,1],
   ' ': [0,0,0,0,0,0,0],
   '_': [0,0,0,1,0,0,0],
 };
@@ -80,6 +94,22 @@ class SevenSegmentDisplay {
       str = str.substring(0, pos) + '-' + str.substring(pos + 1);
     }
     this._showString(str);
+  }
+
+  setDecimals(decimals) {
+    this.decimals = Math.max(0, Math.min(this.digits - 1, decimals));
+    this._dotPos = this.decimals > 0 ? this.digits - this.decimals - 1 : -1;
+    for (let i = 0; i < this.digits; i++) {
+      if (this._els[i] && this._els[i].dot) {
+        this._els[i].dot.className = 'seg-dot' + (this.decimals > 0 && i === this._dotPos ? '' : ' seg-dot-hidden');
+      }
+    }
+  }
+
+  showString(s) {
+    const str = String(s || '');
+    const padded = ('     ' + str).slice(-this.digits);
+    this._showString(padded);
   }
 
   _showString(s) {

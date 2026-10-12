@@ -33,10 +33,15 @@ import {
 import { telemetry } from './telemetry.js';
 import { globalErrorLogger } from '../data/error-logger.js';
 
-const UNITS = [
-  { key: 'g',  label: 'g',  factor: 1,        places: 2 },
-  { key: 'oz', label: 'oz', factor: 0.035274, places: 3 },
-];
+import {
+  UNITS_CONFIG,
+  convertWeight,
+  calculatePieceCount,
+  calculateTiltAngle
+} from './scaleMath.js';
+import { soundEffects } from './soundEffects.js';
+
+const UNITS = UNITS_CONFIG;
 
 class PhonewayApp {
   constructor() {
@@ -95,6 +100,11 @@ class PhonewayApp {
     this._awaitingMotionPermission = false;
     this._powerTransitioning = false;
     this._powerButtonBusy = false;
+    this._scaleMode = 'WEIGH';
+    this._pcsPieceWeightG = null;
+    this._pcsSampleCount = 10;
+    this._peakG = 0;
+    this._readingHistoryList = [];
     
     // Bind callbacks
     this.scale.onWeight = (g, conf, stable) => {
@@ -103,6 +113,7 @@ class PhonewayApp {
     };
     this.scale.onStable = (g) => this._onStableReading(g);
     this.scale.onRaw = (x, y, z) => {
+      this._updateSpiritLevel(x, y, z);
       // Ensure corner competency & percentile reading always updates in real time
       if (!this.powered || this._precisionMode) {
         this._updateAccuracyDisplay(0.85);
@@ -245,11 +256,16 @@ class PhonewayApp {
       const stabilityBar = document.getElementById('stabilityBar');
       const ledPower = document.getElementById('ledPower');
       const ledStable = document.getElementById('ledStable');
+      const ledAudio = document.getElementById('ledAudio');
       
       if (digitDisplay) this.display = new SevenSegmentDisplay(digitDisplay, 5, 2);
       if (stabilityBar) this.stabBar = new StabilityBar(stabilityBar);
       if (ledPower) this.ledPower = new LED(ledPower);
       if (ledStable) this.ledStable = new LED(ledStable);
+      if (ledAudio) {
+        this.ledAudio = new LED(ledAudio);
+        this.ledAudio.on(soundEffects.isMuted() ? 'off' : 'green');
+      }
     } catch (e) {
       console.error('Display init error:', e);
     }
@@ -268,17 +284,22 @@ class PhonewayApp {
     
     console.log('[Phoneway] Binding buttons...');
     
-    bind('btnPower', () => this._togglePower());
-    bind('btnTare', () => this._tare());
-    bind('btnCal', () => this._showCalModal());
-    bind('btnUnits', () => this._cycleUnits());
-    bind('btnMode', () => this._cycleMode());
-    bind('btnHold', () => this._hold());
-    bind('btnVerify', () => this._showVerifyPanel());
-    bind('btnHammer', () => this._triggerHammer());
-    bind('btnPrecision', () => this._precisionMeasure());
-    bind('btnStats', () => this._showStats());
+    bind('btnPower', () => { soundEffects.playKeyClick(); this._togglePower(); });
+    bind('btnTare', () => { soundEffects.playKeyClick(); this._tare(); });
+    bind('btnCal', () => { soundEffects.playKeyClick(); this._showCalModal(); });
+    bind('btnUnits', () => { soundEffects.playKeyClick(); this._cycleUnits(); });
+    bind('btnMode', () => { soundEffects.playKeyClick(); this._cycleMode(); });
+    bind('btnHold', () => { soundEffects.playKeyClick(); this._hold(); });
+    bind('btnVerify', () => { soundEffects.playKeyClick(); this._showVerifyPanel(); });
+    bind('btnHammer', () => { soundEffects.playKeyClick(); this._triggerHammer(); });
+    bind('btnPrecision', () => { soundEffects.playKeyClick(); this._precisionMeasure(); });
+    bind('btnStats', () => { soundEffects.playKeyClick(); this._showStats(); });
     bind('btnLight', () => this._toggleBacklight());
+    bind('ledAudio', () => {
+      const active = soundEffects.toggleMute();
+      if (this.ledAudio) this.ledAudio.on(active ? 'green' : 'off');
+      this._showToast(active ? '🔊 Scale audio effects: ON' : '🔇 Scale audio muted', 1500);
+    });
     
     bind('startCalBtn', () => this._startCalibration());
     bind('calCancelBtn', () => this._hideCalModal());
@@ -390,6 +411,7 @@ class PhonewayApp {
           this.backgroundFusion.start().catch(() => {});
           this._setState('READY');
           this._showToast('Scale ready — place phone on soft surface', 3000);
+          soundEffects.playPowerChime(true);
           hapticFeedback([30, 20, 30]);
         } catch (e) {
           console.error('Scale start error:', e);
@@ -403,6 +425,7 @@ class PhonewayApp {
         this._setState('OFF');
         if (this.display) this.display.setValue(null);
         if (this.ledStable) this.ledStable.off();
+        soundEffects.playPowerChime(false);
         hapticFeedback([50]);
       }
     } finally {
@@ -497,9 +520,22 @@ class PhonewayApp {
     this.currentG = grams;
 
     if (!this._holdActive) {
-      const u = UNITS[this.unitIdx];
-      if (this.display) {
-        this.display.setValue(grams * u.factor);
+      if (this._scaleMode === 'PCS') {
+        if (this._pcsPieceWeightG && this._pcsPieceWeightG > 0) {
+          const pcs = calculatePieceCount(grams, this._pcsPieceWeightG);
+          if (this.display) this.display.setValue(pcs);
+        } else {
+          if (this.display) this.display.showString(grams > 0.1 ? 'CAL' : 'PCS');
+        }
+      } else if (this._scaleMode === 'PEAK') {
+        this._peakG = Math.max(this._peakG || 0, grams);
+        const u = UNITS[this.unitIdx];
+        if (this.display) this.display.setValue(this._peakG * u.factor);
+      } else {
+        const u = UNITS[this.unitIdx];
+        if (this.display) {
+          this.display.setValue(grams * u.factor);
+        }
       }
     }
 
@@ -615,6 +651,52 @@ class PhonewayApp {
 
   _onStableReading(grams) {
     console.log('Stable reading:', grams.toFixed(2), 'g');
+    if (grams > 0.15) {
+      soundEffects.playBeepStable();
+      this._addReadingHistory(grams);
+    }
+  }
+
+  _addReadingHistory(grams) {
+    if (!Number.isFinite(grams) || grams < 0.1) return;
+    this._readingHistoryList = this._readingHistoryList || [];
+    this._readingHistoryList.unshift({ grams, timestamp: Date.now() });
+    if (this._readingHistoryList.length > 5) {
+      this._readingHistoryList.pop();
+    }
+    const container = document.getElementById('readingHistory');
+    if (!container) return;
+    const u = UNITS[this.unitIdx];
+    container.innerHTML = this._readingHistoryList.map(item => {
+      const val = (item.grams * u.factor).toFixed(u.places);
+      return `<span class="history-chip" style="display:inline-block;padding:2px 8px;margin:2px;background:rgba(214,155,56,0.15);border:1px solid rgba(214,155,56,0.4);border-radius:12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#f2c86b;" title="${item.grams.toFixed(2)}g at ${new Date(item.timestamp).toLocaleTimeString()}">${val}${u.label}</span>`;
+    }).join(' ');
+  }
+
+  _updateSpiritLevel(x, y, z) {
+    const bubble = document.getElementById('spiritBubble');
+    const angleEl = document.getElementById('spiritAngle');
+    if (!bubble || !angleEl) return;
+
+    const tilt = calculateTiltAngle(x, y, z);
+    const maxOffset = 13;
+    const clampedX = Math.max(-maxOffset, Math.min(maxOffset, tilt.roll * 2.2));
+    const clampedY = Math.max(-maxOffset, Math.min(maxOffset, -tilt.pitch * 2.2));
+
+    bubble.style.transform = `translate(calc(-50% + ${clampedX.toFixed(1)}px), calc(-50% + ${clampedY.toFixed(1)}px))`;
+
+    bubble.classList.toggle('tilt-warn', !tilt.isLevel && tilt.isAcceptable);
+    bubble.classList.toggle('tilt-bad', !tilt.isAcceptable);
+    angleEl.classList.toggle('tilt-warn', !tilt.isLevel && tilt.isAcceptable);
+    angleEl.classList.toggle('tilt-bad', !tilt.isAcceptable);
+
+    if (tilt.isLevel) {
+      angleEl.textContent = `${tilt.total.toFixed(1)}° · LEVEL`;
+    } else if (tilt.isAcceptable) {
+      angleEl.textContent = `${tilt.total.toFixed(1)}° · ACCEPTABLE`;
+    } else {
+      angleEl.textContent = `${tilt.total.toFixed(1)}° · LEVEL PHONE`;
+    }
   }
 
   _updateSensorBar(barId, confidence) {
@@ -705,9 +787,18 @@ class PhonewayApp {
   async _tare() {
     if (!this.powered) return;
 
+    soundEffects.playTareClick();
     this._holdActive = false;
-    if (this._pendingCalibration && this.currentG > 0.2) {
+    this._peakG = 0;
 
+    if (this._scaleMode === 'PCS' && this.currentG > 0.15) {
+      this._pcsPieceWeightG = this.currentG / this._pcsSampleCount;
+      this._showToast(`PCS Calibrated: ${this._pcsSampleCount} pcs = ${this.currentG.toFixed(2)}g (${(this._pcsPieceWeightG).toFixed(3)}g/pc)`, 3500);
+      hapticFeedback([30, 40, 30]);
+      return;
+    }
+
+    if (this._pendingCalibration && this.currentG > 0.2) {
       this._pendingCalibration = false;
 
       const result = this.scale.calibrate(this.calWeightG);
@@ -956,24 +1047,64 @@ class PhonewayApp {
   }
 
   _cycleUnits() {
+    if (this._scaleMode === 'PCS') {
+      this._showToast('In PCS counting mode. Press MODE to return to units', 2000);
+      return;
+    }
     this.unitIdx = (this.unitIdx + 1) % UNITS.length;
     const u = UNITS[this.unitIdx];
     
     const el = document.getElementById('unitLabel');
     if (el) el.textContent = u.label;
     
-    if (this.display && !this._holdActive) {
-      this.display.setValue(this.currentG * u.factor);
+    if (this.display) {
+      this.display.setDecimals(u.places);
+      if (!this._holdActive) {
+        this.display.setValue(this.currentG * u.factor);
+      }
     }
     
+    this._showToast(`Unit: ${u.name} (${u.label})`, 1800);
     hapticFeedback([15]);
   }
 
   _cycleMode() {
-    const modes = ['ACCEL', 'PRECISION', 'STATISTICS'];
-    this._currentMode = (this._currentMode || 0) + 1;
-    if (this._currentMode >= modes.length) this._currentMode = 0;
-    this._showToast(`Mode: ${modes[this._currentMode]}`, 2000);
+    const modes = [
+      { key: 'WEIGH', label: 'WEIGH', title: 'Live Weighing Mode' },
+      { key: 'PCS', label: 'PCS', title: 'Pieces Counting Mode' },
+      { key: 'PEAK', label: 'PEAK', title: 'Peak Max Hold Mode' },
+      { key: 'PRECISION', label: 'PREC', title: 'Precision Filter Mode' },
+    ];
+    this._modeIdx = ((this._modeIdx || 0) + 1) % modes.length;
+    const mode = modes[this._modeIdx];
+    this._scaleMode = mode.key;
+
+    const modeLabel = document.getElementById('modeLabel');
+    if (modeLabel) modeLabel.textContent = mode.label;
+
+    const unitLabel = document.getElementById('unitLabel');
+    if (this._scaleMode === 'PCS') {
+      if (unitLabel) unitLabel.textContent = 'PCS';
+      if (this.display) this.display.setDecimals(0);
+      if (!this._pcsPieceWeightG) {
+        this._showToast('PCS Mode: Place 10 items & tap TARE to calibrate sample', 3500);
+      } else {
+        this._showToast(`PCS Mode: Calibrated at ${this._pcsPieceWeightG.toFixed(3)}g/pc`, 2500);
+      }
+    } else {
+      const u = UNITS[this.unitIdx];
+      if (unitLabel) unitLabel.textContent = u.label;
+      if (this.display) this.display.setDecimals(u.places);
+      if (this._scaleMode === 'PEAK') {
+        this._peakG = this.currentG || 0;
+        this._showToast('Peak Hold Mode: Captures maximum load', 2500);
+      } else if (this._scaleMode === 'PRECISION') {
+        this._showToast('Precision Filter Mode: 5s noise integration', 2500);
+      } else {
+        this._showToast('Standard Weigh Mode active', 2000);
+      }
+    }
+    hapticFeedback([20]);
   }
 
   _hold() {
@@ -1363,28 +1494,51 @@ class PhonewayApp {
   }
 
   _exportData() {
+    const timestamp = Date.now();
+    const stats = this.scale.getVerificationStats() || {};
+    const ledger = this.scale.ledger ? this.scale.ledger.getAll() : [];
+    
     const data = {
-      calibration: this.scale.getCalibrationQuality(),
-      verifications: this.scale.getVerificationStats(),
+      app: 'PhoneWeigh',
+      version: APP_VERSION,
       timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      deviceInfo: getDeviceInfo(),
-      version: APP_VERSION
+      calibration: this.scale.getCalibrationQuality(),
+      verificationStats: stats,
+      ledgerHistory: ledger,
+      unit: UNITS[this.unitIdx].label,
+      deviceInfo: getDeviceInfo()
     };
     
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `phoneway_data_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    let csv = 'Timestamp,ReferenceWeight_g,MeasuredError_g,DeviceModel,Result\n';
+    ledger.forEach(entry => {
+      csv += `${new Date(entry.timestamp).toISOString()},${entry.referenceWeight},${entry.measuredError},"${(entry.deviceModel||'').replace(/"/g, '""')}",${Math.abs(entry.measuredError) <= 0.1 ? 'PASS' : 'FLAG'}\n`;
+    });
+
+    const blobJson = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const urlJson = URL.createObjectURL(blobJson);
+    const aJson = document.createElement('a');
+    aJson.href = urlJson;
+    aJson.download = `phoneweigh_data_${timestamp}.json`;
+    aJson.click();
+    URL.revokeObjectURL(urlJson);
+
+    if (ledger.length > 0) {
+      const blobCsv = new Blob([csv], { type: 'text/csv' });
+      const urlCsv = URL.createObjectURL(blobCsv);
+      const aCsv = document.createElement('a');
+      aCsv.href = urlCsv;
+      aCsv.download = `phoneweigh_ledger_${timestamp}.csv`;
+      aCsv.click();
+      URL.revokeObjectURL(urlCsv);
+    }
     
-    this._showToast('Data exported', 2000);
+    this._showToast('Exported laboratory JSON & CSV data', 2500);
   }
 
   _toggleBacklight() {
-    document.body.classList.toggle('backlight-on');
+    const isOn = document.body.classList.toggle('backlight-on');
+    soundEffects.playKeyClick();
+    this._showToast(isOn ? 'Backlight: High Glow' : 'Backlight: Normal', 1500);
     hapticFeedback([30]);
   }
 

@@ -635,3 +635,144 @@ html, body {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.2); filter: brightness(1.3); }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PRECISION DIGITAL SPIRIT LEVEL (BUBBLE INDICATOR)
+════════════════════════════════════════════════════════════ */
+.spirit-level-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(18, 14, 8, 0.82);
+  border: 1px solid rgba(214, 155, 56, 0.35);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 6px 0 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 160, 0.08), 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.spirit-gauge {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #0d120d 0%, #050805 70%, #000 100%);
+  border: 1.5px solid #b8860b;
+  box-shadow: 0 0 8px rgba(184, 134, 11, 0.35), inset 0 0 6px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.spirit-crosshair-h {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(214, 155, 56, 0.35);
+  transform: translateY(-50%);
+}
+
+.spirit-crosshair-v {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(214, 155, 56, 0.35);
+  transform: translateX(-50%);
+}
+
+.spirit-target-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px dashed rgba(57, 255, 20, 0.5);
+  transform: translate(-50%, -50%);
+}
+
+.spirit-bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #39ff14 55%, #188008 100%);
+  box-shadow: 0 0 8px #39ff14;
+  transform: translate(-50%, -50%);
+  transition: transform 0.06s ease-out, background 0.25s, box-shadow 0.25s;
+  pointer-events: none;
+}
+
+.spirit-bubble.tilt-warn {
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #ffb300 55%, #b36b00 100%);
+  box-shadow: 0 0 8px #ffb300;
+}
+
+.spirit-bubble.tilt-bad {
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #ff4444 55%, #990000 100%);
+  box-shadow: 0 0 8px #ff4444;
+}
+
+.spirit-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.spirit-badge {
+  font-family: var(--font-brand, 'Orbitron', monospace);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--gold-light, #f2c86b);
+  letter-spacing: 1.5px;
+}
+
+.spirit-angle {
+  font-family: var(--font-display, 'Share Tech Mono', monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: #39ff14;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.4);
+  transition: color 0.25s;
+}
+
+.spirit-angle.tilt-warn {
+  color: #ffb300;
+  text-shadow: 0 0 6px rgba(255, 179, 0, 0.4);
+}
+
+.spirit-angle.tilt-bad {
+  color: #ff4444;
+  text-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BACKLIGHT ILLUMINATION SYSTEM
+════════════════════════════════════════════════════════════ */
+body.backlight-on .display-window {
+  box-shadow: 0 0 40px rgba(255, 179, 0, 0.5), inset 0 0 35px rgba(255, 179, 0, 0.35) !important;
+  background: radial-gradient(circle at 50% 50%, #332408 0%, #1a1204 70%, #0a0701 100%) !important;
+  border-color: #ffd54f !important;
+}
+
+body.backlight-on .seg.seg-on {
+  filter: drop-shadow(0 0 8px #ffb300) drop-shadow(0 0 16px #ff8800) !important;
+}
+
+body.backlight-on .display-unit {
+  color: #ffd54f !important;
+  text-shadow: 0 0 10px #ffb300, 0 0 20px #ff8800 !important;
+}
+
+body.backlight-on #btnLight {
+  box-shadow: 0 0 18px rgba(255, 215, 0, 0.7) !important;
+  border-color: #ffd54f !important;
+}

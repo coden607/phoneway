@@ -209,4 +209,67 @@ class TemperatureCompensator {
   }
 }
 
-export { MovingAverage, EMA, SimpleKalman, MultiPointCalibration, TemperatureCompensator, DirectionalProjection };
+/**
+ * Standard precision laboratory scale unit specifications.
+ */
+const UNITS_CONFIG = [
+  { key: 'g',   label: 'g',   name: 'Grams',       factor: 1.0,         places: 2 },
+  { key: 'oz',  label: 'oz',  name: 'Ounces',      factor: 0.035273962, places: 3 },
+  { key: 'ct',  label: 'ct',  name: 'Carats',      factor: 5.0,         places: 2 },
+  { key: 'gn',  label: 'gn',  name: 'Grains',      factor: 15.4323584,  places: 1 },
+  { key: 'dwt', label: 'dwt', name: 'Pennyweight', factor: 0.64301493,  places: 2 },
+  { key: 'ozt', label: 'ozt', name: 'Troy Ounces', factor: 0.032150747, places: 3 },
+];
+
+/**
+ * Converts a weight in grams into the target scale unit.
+ */
+function convertWeight(grams, unitKey = 'g') {
+  const unit = UNITS_CONFIG.find(u => u.key === unitKey) || UNITS_CONFIG[0];
+  const value = Math.max(0, grams) * unit.factor;
+  return {
+    value,
+    formatted: value.toFixed(unit.places),
+    places: unit.places,
+    label: unit.label,
+    name: unit.name,
+    key: unit.key
+  };
+}
+
+/**
+ * Calculates pieces count for PCS mode given total grams and single unit piece mass.
+ */
+function calculatePieceCount(grams, pieceWeightG) {
+  if (!pieceWeightG || pieceWeightG <= 0 || grams <= 0) return 0;
+  return Math.max(0, Math.round(grams / pieceWeightG));
+}
+
+/**
+ * Calculates device tilt pitch, roll, and absolute angle in degrees from accelerometer coordinates.
+ */
+function calculateTiltAngle(x = 0, y = 0, z = 9.8) {
+  const pitch = Math.atan2(y, Math.sqrt(x * x + z * z)) * (180 / Math.PI);
+  const roll = Math.atan2(-x, z) * (180 / Math.PI);
+  const total = Math.sqrt(pitch * pitch + roll * roll);
+  return {
+    pitch,
+    roll,
+    total,
+    isLevel: total <= 1.5,
+    isAcceptable: total <= 3.5
+  };
+}
+
+export {
+  MovingAverage,
+  EMA,
+  SimpleKalman,
+  MultiPointCalibration,
+  TemperatureCompensator,
+  DirectionalProjection,
+  UNITS_CONFIG,
+  convertWeight,
+  calculatePieceCount,
+  calculateTiltAngle
+};
