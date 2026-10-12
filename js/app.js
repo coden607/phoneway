@@ -469,41 +469,55 @@ class PhonewayApp {
         const medianDeviation = deviations.length ? deviations[Math.floor(deviations.length / 2)] : Infinity;
 
         // Check for physical deflection and sensor stillness
+        const rawTilt = Math.hypot(this.scale.maDx.mean, this.scale.maDy.mean);
         const deflection = this.scale.directionalProj.project(this.scale.maDx.mean, this.scale.maDy.mean);
-        const calibrationStable = this._calFlowReadings.length >= 15
-          && (stableReading > 0.08 || deflection > 0.0004)
-          && medianDeviation <= Math.max(1.5, stableReading * 0.35)
-          && !this.scale.motionBlocked
-          && confidence >= 0.05;
+        const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
+        const hasMinSamples = this._calFlowReadings.length >= 6;
+        const stillnessQuality = (this.scale.motionQuality != null) ? this.scale.motionQuality : 0.8;
+        const lowVariance = medianDeviation <= Math.max(1.8, stableReading * 0.4);
+        const isSteady = hasMinSamples && lowVariance && (!this.scale.motionBlocked || stillnessQuality >= 0.25);
 
-        if (calibrationStable) {
-          this._calFlowStableCount = Math.min(999, this._calFlowStableCount + 1);
+        if (isSteady) {
+          this._calFlowStableCount = Math.min(20, (this._calFlowStableCount || 0) + 1);
         } else {
-          this._calFlowStableCount = 0;
+          this._calFlowStableCount = Math.max(0, (this._calFlowStableCount || 0) - 1);
         }
 
-        if (status) {
-          status.textContent = calibrationStable ? "STEADY · READY TO CALIBRATE" : "HOLD STILL · SETTLING...";
-        }
+        const stableTarget = 8;
+        const autoLock = (this._calFlowStableCount >= stableTarget) || (elapsed > 3000 && hasMinSamples);
 
-        if (button) {
-          if (this._calFlowStableCount >= 15) {
-            this._calFlowLockedWeight = stableReading;
-            this._calFlowStep = 3;
+        if (autoLock) {
+          this._calFlowLockedWeight = stableReading;
+          this._calFlowStep = 3;
+          if (button) {
             button.disabled = false;
             button.textContent = "CALIBRATE NOW";
-            if (status) status.textContent = "STEADY · TAP CALIBRATE NOW";
-            const body = document.querySelector("#stepOverlay .step-body");
-            if (body) {
-              body.textContent = "STEP 3\n\nSteady lock detected!\n\nTap CALIBRATE NOW to lock sensitivity to " + this.calWeightG + "g.";
+          }
+          if (status) {
+            status.textContent = "STEADY · TAP CALIBRATE NOW";
+          }
+          const body = document.querySelector("#stepOverlay .step-body");
+          if (body) {
+            body.textContent = "STEP 3\n\nSteady lock detected!\n\nTap CALIBRATE NOW to lock sensitivity to " + this.calWeightG + "g.";
+          }
+        } else if (button) {
+          if (elapsed > 1200) {
+            // Manual lock override enabled after 1.2s — user is never trapped
+            button.disabled = false;
+            button.textContent = "LOCK " + this.calWeightG + "g & CALIBRATE (TAP)";
+            if (status) {
+              status.textContent = "SETTLING (" + Math.min(stableTarget, this._calFlowStableCount) + "/" + stableTarget + ") · OR TAP TO LOCK";
             }
           } else {
             button.disabled = true;
-            button.textContent = "WAITING FOR LOCK";
+            button.textContent = "HOLD STILL (" + Math.min(stableTarget, this._calFlowStableCount) + "/" + stableTarget + ")...";
+            if (status) {
+              status.textContent = "HOLD STILL · SETTLING...";
+            }
           }
         }
+        return;
       }
-      return;
     }
 
     if (!this.scale.calibrated && !this._pendingCalibration) {
@@ -805,7 +819,7 @@ class PhonewayApp {
       return;
     }
 
-    if (this._pendingCalibration) {
+    if (this._pendingCalibration || this._calFlowStep === 2) {
       this._pendingCalibration = false;
 
       const result = this.scale.calibrate(this.calWeightG);
@@ -817,6 +831,24 @@ class PhonewayApp {
         soundEffects.playPowerChime(true);
         this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
         hapticFeedback([30, 50, 30]);
+
+        if (this._calFlowActive) {
+          this._calFlowStep = 4;
+          const overlay = document.getElementById("stepOverlay");
+          if (overlay) {
+            const body = overlay.querySelector(".step-body");
+            const status = document.getElementById("calSensorStatus");
+            const button = document.getElementById("calReadyBtn");
+            const progress = document.getElementById("calStepProgress");
+            if (body) body.textContent = "CALIBRATION COMPLETE!\n\n👉 Remove the " + this.calWeightG + "g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.";
+            if (status) status.textContent = "REMOVE WEIGHT · TAP DONE";
+            if (progress) progress.style.width = "100%";
+            if (button) {
+              button.disabled = false;
+              button.textContent = "DONE";
+            }
+          }
+        }
 
         if (points < 3) {
           setTimeout(() => {
@@ -1009,6 +1041,17 @@ class PhonewayApp {
 
     render(1);
 
+    const closeBtn = document.getElementById("stepOverlayClose");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        overlay.classList.remove("show");
+        overlay.style.display = "none";
+        this._calFlowActive = false;
+        this._calFlowStep = 0;
+        this._pendingCalibration = false;
+      };
+    }
+
     button.onclick = async () => {
       if (this._calFlowStep === 1) {
         button.disabled = true;
@@ -1016,6 +1059,7 @@ class PhonewayApp {
         body.textContent = "Removing offset and waiting for a clean zero. Keep the phone still.";
         await this.scale.tare();
         this._calFlowStep = 2;
+        this._calStep2StartTime = Date.now();
         this._calFlowStableCount = 0;
         this._calFlowReadings = [];
         this._calFlowLockedWeight = null;
@@ -1023,9 +1067,10 @@ class PhonewayApp {
         return;
       }
 
-      if (this._calFlowStep === 3) {
+      if (this._calFlowStep === 2 || this._calFlowStep === 3) {
         button.disabled = true;
         status.textContent = "CALIBRATING...";
+        body.textContent = "Locking sensitivity for " + this.calWeightG + "g. Keep phone still...";
         const res = this.scale.calibrate(this.calWeightG);
         if (res.success) {
           soundEffects.playPowerChime(true);
@@ -1040,6 +1085,7 @@ class PhonewayApp {
           button.disabled = false;
           button.textContent = "RETRY STEP 2";
           this._calFlowStep = 2;
+          this._calStep2StartTime = Date.now();
           this._calFlowStableCount = 0;
           this._calFlowReadings = [];
           return;

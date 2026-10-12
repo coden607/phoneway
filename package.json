@@ -1,6 +1,6 @@
 {
   "name": "phoneweigh",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "description": "PhoneWeigh — Honest tilt-based digital precision scale PWA. Resolution 0.1g — accuracy = your verification ledger. Zero-dependency vanilla ES modules, no build step.",
   "type": "module",
   "scripts": {

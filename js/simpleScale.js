@@ -151,10 +151,13 @@ class SimpleScale {
     this.gyroRate = rotationRate;
     this.comboFusion.mark('gyroStill', Math.max(0, 1 - rotationRate / 40), 0.25);
     const gravityMagnitude = Math.hypot(this.filteredAccel.x, this.filteredAccel.y, this.filteredAccel.z);
-    const gravityError = Math.abs(gravityMagnitude - 9.80665);
-    this.gravityQuality = gravityMagnitude > 1 ? Math.max(0, 1 - gravityError / 0.5) : 0;
-    this.motionQuality = Math.max(0, 1 - jerk / 0.35) * Math.max(0, 1 - rotationRate / 45) * this.gravityQuality;
-    this.motionBlocked = jerk > 0.45 || rotationRate > 35 || gravityError > 0.5;
+    const refGravity = this.baseline
+      ? Math.hypot(this.baseline.x, this.baseline.y, this.baseline.z)
+      : 9.80665;
+    const gravityError = Math.abs(gravityMagnitude - refGravity);
+    this.gravityQuality = gravityMagnitude > 1 ? Math.max(0, 1 - gravityError / 1.5) : 0;
+    this.motionQuality = Math.max(0, 1 - jerk / 0.45) * Math.max(0, 1 - rotationRate / 45) * Math.max(0.2, this.gravityQuality);
+    this.motionBlocked = jerk > 0.60 || rotationRate > 40 || gravityError > 1.5;
     if (this._tare_in_progress) {
       const elapsed = Date.now() - (this._tare_started_at || Date.now());
       if (this._tare_warmup_count < this._tare_warmup) {
@@ -348,14 +351,26 @@ class SimpleScale {
 
   calibrate(knownGrams) {
     if (!Number.isFinite(knownGrams) || knownGrams <= 0) return { success: false, error: 'Choose a valid reference weight' };
-    if (!this.baseline) return { success: false, error: 'Must tare first' };
-    if (this.maDx.length < 15) return { success: false, error: 'Still settling - wait a moment' };
-    if (this.motionBlocked && this.motionQuality < 0.25) return { success: false, error: 'Hold the phone still and try again' };
+    if (!this.baseline) {
+      this.baseline = { x: this.filteredAccel.x, y: this.filteredAccel.y, z: this.filteredAccel.z };
+    }
+    if (this.maDx.length < 8) return { success: false, error: 'Still settling - wait a moment' };
+    if (this.motionBlocked && this.motionQuality < 0.15) return { success: false, error: 'Hold the phone still and try again' };
     // Lock directional tilt vector from calibrated reference load
     this.directionalProj.setCalibrationVector(this.maDx.mean, this.maDy.mean);
-    const deltaA = Math.max(0.0005, this.directionalProj.project(this.maDx.mean, this.maDy.mean));
+    const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
 
-    if (deltaA < 0.0005) return { success: false, error: 'Signal too weak - use softer surface, fulcrum, or heavier weight' };
+    // Adapt noise floor if resting deflection on a firm surface is small
+    if (rawDelta > 0.0001 && rawDelta <= this.directionalProj.noiseFloor * 1.5) {
+      this.directionalProj.noiseFloor = Math.max(0.00005, rawDelta * 0.35);
+    }
+
+    let deltaA = this.directionalProj.project(this.maDx.mean, this.maDy.mean);
+    if (deltaA < 0.0001) {
+      deltaA = Math.max(0.0002, rawDelta * 0.7);
+    }
+
+    if (deltaA < 0.0001) return { success: false, error: 'Signal too weak - use softer surface, fulcrum, or heavier weight' };
     if (!this.multiCal.addPoint(knownGrams, deltaA)) return { success: false, error: 'Calibration signal was invalid - try again' };
     const newSensitivity = knownGrams / deltaA;
     this.sensitivity = this.calibrated ? 0.7 * newSensitivity + 0.3 * this.sensitivity : newSensitivity;

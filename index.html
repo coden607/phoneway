@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
   <title>PhoneWeigh v5.2 — Digital Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=5.2.0"/>
+  <link rel="manifest"          href="manifest.json?v=5.2.1"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=5.2.0"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.2.1"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,7 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script src="js/versionCheck.js?v=5.2.0"></script>
+<script src="js/versionCheck.js?v=5.2.1"></script>
 </head>
 <body>
 
@@ -486,7 +486,8 @@
      STEP-BY-STEP CALIBRATION OVERLAY
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="stepOverlay" style="display:none">
-  <div class="modal-card step-card">
+  <div class="modal-card step-card" style="position:relative">
+    <button id="stepOverlayClose" class="verify-close" style="position:absolute;top:10px;right:10px;background:none;border:none;color:#888;font-size:18px;cursor:pointer" aria-label="Close walkthrough">×</button>
     <div class="step-title modal-title">CALIBRATION WALKTHROUGH</div>
     <pre class="step-body"></pre>
     <div class="cal-progress-wrap" style="margin-top:16px">
@@ -728,7 +729,7 @@
 </div>
 
 <!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
-<script src="js/errorTrap.js?v=5.2.0"></script>
+<script src="js/errorTrap.js?v=5.2.1"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -855,7 +856,7 @@
 
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=5.2.0"></script>
+<script type="module" src="js/app.js?v=5.2.1"></script>
 
 
 
