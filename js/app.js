@@ -1532,7 +1532,8 @@ class PhonewayApp {
     return {
       vibrate: (pattern) => {
         try {
-          return (typeof navigator !== 'undefined' && navigator.vibrate)
+          return (typeof navigator !== 'undefined' && navigator.vibrate &&
+            (!navigator.userActivation || navigator.userActivation.hasBeenActive))
             ? navigator.vibrate(pattern) : false;
         } catch (_) { return false; }
       },

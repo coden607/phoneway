@@ -441,7 +441,10 @@ class UniversalStorage {
  * Haptic feedback with fallbacks
  */
 function hapticFeedback(pattern) {
-  if (DeviceCapabilities.hasVibration) {
+  // Browsers block vibration until the user has tapped the page; calling it
+  // earlier logs an intervention error, so wait for a real user activation.
+  const activated = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+  if (DeviceCapabilities.hasVibration && activated) {
     try {
       navigator.vibrate(pattern);
     } catch (e) {
