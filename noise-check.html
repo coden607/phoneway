@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PhoneWeigh noise check</title>
+<style>
+  :root { --bg:#fff; --fg:#111; --mut:#555; --acc:#0a64d6; --ok:#0b7a3b; --bad:#b3261e; --card:#f2f3f5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0e0f11; --fg:#f2f2f2; --mut:#a0a4aa; --acc:#4d9bff; --ok:#43c37a; --bad:#ff7b72; --card:#1a1c20; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:18px/1.35 -apple-system, system-ui, sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p { margin:6px 0; color:var(--mut); }
+  .card { background:var(--card); border-radius:14px; padding:14px; margin:14px 0; }
+  button, select { width:100%; font:inherit; font-weight:600; padding:16px; border-radius:12px; border:0; margin-top:8px; }
+  button { background:var(--acc); color:#fff; }
+  button:disabled { opacity:.45; }
+  select { background:var(--bg); color:var(--fg); border:1px solid var(--mut); font-weight:500; }
+  .big { font-size:34px; font-weight:700; margin:4px 0; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  #bar { height:10px; border-radius:6px; background:var(--bg); overflow:hidden; margin-top:10px; }
+  #fill { height:100%; width:0; background:var(--acc); }
+  small { color:var(--mut); }
+</style>
+</head>
+<body>
+<h1>Noise check</h1>
+<p>Tells us if this phone can detect 0.1 g.</p>
+
+<div class="card">
+  <b>1. Rest</b>
+  <p>Lay the phone flat, screen up, on the surface you will weigh on. Do not touch it or the table.</p>
+  <button id="b1">Measure rest (20 s)</button>
+  <small id="s1"></small>
+</div>
+
+<div class="card">
+  <b>2. With a coin</b>
+  <select id="coin">
+    <option value="5.000">Nickel – 5.00 g</option>
+    <option value="5.670">Quarter – 5.67 g</option>
+    <option value="8.100">Dollar coin – 8.10 g</option>
+    <option value="2.500">Penny (1982 or later) – 2.50 g</option>
+    <option value="2.268">Dime – 2.27 g</option>
+  </select>
+  <p>Put the coin in the middle of the back of the phone. Do not touch anything.</p>
+  <button id="b2" disabled>Measure with coin (20 s)</button>
+  <small id="s2"></small>
+</div>
+
+<div class="card" id="out" hidden>
+  <b>Result</b>
+  <div class="big" id="limit"></div>
+  <div id="verdict"></div>
+  <p id="detail"></p>
+</div>
+<div id="bar"><div id="fill"></div></div>
+
+<script type="module">
+import { analyzeLoadTest } from './js/noiseBudget.js';
+
+const $ = (id) => document.getElementById(id);
+const DURATION_MS = 20000;
+const rest = [], loaded = [];
+let permitted = false;
+
+async function allowMotion() {
+  if (permitted) return true;
+  try {
+    if (typeof DeviceMotionEvent === 'undefined') throw new Error('This browser has no motion sensor access.');
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r !== 'granted') throw new Error('Motion permission was refused. Allow it in Safari settings and reload.');
+    }
+    permitted = true;
+    return true;
+  } catch (e) { alert(e.message); return false; }
+}
+
+function record(into, label, statusEl) {
+  return new Promise((resolve) => {
+    into.length = 0;
+    const t0 = performance.now();
+    const onMotion = (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (a && [a.x, a.y, a.z].every(Number.isFinite)) into.push([a.x, a.y, a.z]);
+    };
+    window.addEventListener('devicemotion', onMotion);
+    const tick = setInterval(() => {
+      const f = Math.min(1, (performance.now() - t0) / DURATION_MS);
+      $('fill').style.width = (f * 100) + '%';
+      statusEl.textContent = `${label}… ${Math.round(f * 20)} / 20 s`;
+      if (f >= 1) {
+        clearInterval(tick);
+        window.removeEventListener('devicemotion', onMotion);
+        const hz = into.length / (DURATION_MS / 1000);
+        statusEl.textContent = `Done: ${into.length} samples (${hz.toFixed(0)} per second)`;
+        resolve();
+      }
+    }, 200);
+  });
+}
+
+$('b1').onclick = async () => {
+  if (!(await allowMotion())) return;
+  $('b1').disabled = true;
+  await record(rest, 'Measuring rest', $('s1'));
+  if (rest.length < 30) { $('s1').textContent = 'No motion data received. Reload and allow motion.'; $('b1').disabled = false; return; }
+  $('b2').disabled = false; $('b1').disabled = false;
+};
+
+$('b2').onclick = async () => {
+  $('b2').disabled = true;
+  await record(loaded, 'Measuring with coin', $('s2'));
+  $('b2').disabled = false;
+  try {
+    const grams = Number($('coin').value);
+    const r = analyzeLoadTest({ restVectors: rest, loadedVectors: loaded, grams });
+    $('out').hidden = false;
+    $('limit').textContent = `${r.minResolvableGrams.toFixed(2)} g`;
+    $('limit').className = 'big ' + (r.reaches0p1g ? 'ok' : 'bad');
+    $('verdict').textContent = r.reaches0p1g
+      ? 'This phone can detect 0.1 g.'
+      : 'This phone cannot detect 0.1 g on this surface.';
+    $('detail').textContent =
+      `Smallest weight it can tell from noise. Noise ${r.noiseStdDev.toFixed(4)} m/s², ` +
+      `signal ${r.sensitivityPerGram.toFixed(4)} m/s² per gram, ${r.samples} samples.`;
+  } catch (e) {
+    $('out').hidden = false;
+    $('limit').textContent = 'No result';
+    $('limit').className = 'big bad';
+    $('verdict').textContent = e.message;
+    $('detail').textContent = 'Try a softer surface, or a heavier coin.';
+  }
+};
+</script>
+</body>
+</html>

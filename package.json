@@ -1,11 +1,11 @@
 {
   "name": "phoneweigh",
   "version": "5.3.0",
-  "description": "PhoneWeigh — Honest tilt-based digital precision scale PWA. Resolution 0.1g — accuracy = your verification ledger. Zero-dependency vanilla ES modules, no build step.",
+  "description": "PhoneWeigh \u2014 Honest tilt-based digital precision scale PWA. Resolution 0.1g \u2014 accuracy = your verification ledger. Zero-dependency vanilla ES modules, no build step.",
   "type": "module",
   "scripts": {
     "serve": "node scripts/serve.mjs",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/scale_engine.test.js && node --test test/scale_engine.test.js",
     "test:accuracy": "node scripts/test-scale-accuracy.mjs",
     "check": "node scripts/check-static.mjs"
   },
