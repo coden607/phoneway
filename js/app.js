@@ -1160,7 +1160,7 @@ class PhonewayApp {
       if (calBtn) calBtn.classList.remove('pulse');
       this._showToast(`🎉 Calibrated! Locked to ${grams}g (0.1g resolution active)`, 4500);
     } else {
-      this._showToast(`Calibration note: ${result.error || 'deflection subtle'}. Sensitivity balanced.`, 4000);
+      this._showToast(`Not calibrated: ${result.error || 'the weight moved the phone too little to measure'}`, 5000);
       this._setState("READY");
     }
   }

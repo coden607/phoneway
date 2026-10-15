@@ -25,6 +25,27 @@ class AdaptiveKalman {
   reset(){ this.x=null; this.P=1; }
 }
 
+/**
+ * Standard error of the mean that stays honest for CORRELATED samples. The
+ * Kalman/median stages smooth the signal, so neighbouring samples are not
+ * independent and stdDev/sqrt(n) badly understates the uncertainty. Batch means:
+ * average blocks of consecutive samples and take the spread of the block means.
+ */
+function batchMeansSE(values, blocks = 5) {
+  const n = values.length;
+  const size = Math.floor(n / blocks);
+  if (size < 2) return Infinity;
+  const means = [];
+  for (let b = 0; b < blocks; b++) {
+    let sum = 0;
+    for (let i = b * size; i < (b + 1) * size; i++) sum += values[i];
+    means.push(sum / size);
+  }
+  const m = means.reduce((a, c) => a + c, 0) / blocks;
+  const variance = means.reduce((a, c) => a + (c - m) ** 2, 0) / (blocks - 1);
+  return Math.sqrt(variance / blocks);
+}
+
 class SimpleScale {
   constructor() {
     this.active = false;
@@ -354,17 +375,50 @@ class SimpleScale {
     if (!this.baseline) {
       this.baseline = { x: this.filteredAccel.x, y: this.filteredAccel.y, z: this.filteredAccel.z };
     }
-    const curDx = this.filteredAccel.x - (this.baseline ? this.baseline.x : 0);
-    const curDy = this.filteredAccel.y - (this.baseline ? this.baseline.y : 0);
-    this.maDx.reset();
-    this.maDy.reset();
-    for (let i = 0; i < 8; i++) {
-      this.maDx.update(curDx);
-      this.maDy.update(curDy);
+    const MIN_SETTLED_SAMPLES = 40;
+    const MIN_CALIBRATION_SNR = 5;
+    // Calibrate from the settled AVERAGE of the loaded signal. _process() has
+    // been feeding maDx/maDy every sample, so with the weight on, that window
+    // already holds the best estimate. The old code reset it and refilled it
+    // with ONE instantaneous sample, so the whole calibration rested on a single
+    // noisy number (~9x worse than the 80-sample mean). Only fall back to the
+    // instantaneous value when there is not enough history yet.
+    if (this.maDx.length < MIN_SETTLED_SAMPLES || this.maDy.length < MIN_SETTLED_SAMPLES) {
+      const curDx = this.filteredAccel.x - (this.baseline ? this.baseline.x : 0);
+      const curDy = this.filteredAccel.y - (this.baseline ? this.baseline.y : 0);
+      this.maDx.reset();
+      this.maDy.reset();
+      for (let i = 0; i < 8; i++) {
+        this.maDx.update(curDx);
+        this.maDy.update(curDy);
+      }
     }
+    const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
+    let expectedErrorGrams = null;
+
+    // Refuse to calibrate on a signal the sensor cannot distinguish from its own
+    // noise. Below ~3x the standard error of the mean, the "sensitivity" would
+    // just be noise divided into the reference weight, and every later reading
+    // would be wrong in a way that looks plausible. Say so instead.
+    if (this.maDx.length >= MIN_SETTLED_SAMPLES && this.maDy.length >= MIN_SETTLED_SAMPLES) {
+      const stdError = Math.hypot(batchMeansSE(this.maDx.getAll()), batchMeansSE(this.maDy.getAll()));
+      const snr = stdError > 0 ? rawDelta / stdError : Infinity;
+      // Relative error of the sensitivity is about 1/SNR, so a calibration at
+      // SNR 5 is already +/-20% (1 g on a 5 g coin). Measured over 40 noise
+      // seeds: SNR ~50 gives <=0.1 g, ~10 gives ~0.2-0.5 g, <=3 gives 1-3 g.
+      if (snr < MIN_CALIBRATION_SNR) {
+        return {
+          success: false,
+          snr: snr,
+          error: 'Signal too weak (' + snr.toFixed(1) + 'x noise, need ' + MIN_CALIBRATION_SNR + 'x). ' +
+                 'Use a heavier reference weight or a softer surface, then hold still.'
+        };
+      }
+      expectedErrorGrams = Number.isFinite(snr) ? knownGrams / snr : 0;
+    }
+
     // Lock directional tilt vector from calibrated reference load
     this.directionalProj.setCalibrationVector(this.maDx.mean, this.maDy.mean);
-    const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
 
     // Adapt noise floor if resting deflection on a firm surface is small
     if (rawDelta > 0.0001 && rawDelta <= this.directionalProj.noiseFloor * 1.5) {
@@ -401,8 +455,9 @@ class SimpleScale {
        // sensitivity/R² heuristic ("±0.1g (excellent)") described curve-fit
     // shape, never true error, and is removed.
     const claim = this.ledger.accuracyClaim();
-    const estimatedAccuracy = claim.count > 0 ? claim.text + ' (measured)' : 'UNVERIFIED — run VERIFY';
-    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA };
+    const expected = expectedErrorGrams != null ? ' (signal/noise suggests about +/-' + expectedErrorGrams.toFixed(1) + ' g)' : '';
+    const estimatedAccuracy = claim.count > 0 ? claim.text + ' (measured)' : 'UNVERIFIED' + expected + ' — run VERIFY';
+    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA, expectedErrorGrams: expectedErrorGrams };
   }
 
   verifyAgainstKnown(knownWeight, options) {
