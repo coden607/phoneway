@@ -481,7 +481,11 @@ class PhonewayApp {
   _onWeight(grams, confidence, isStable) {
     if (!this.powered || this._precisionMode) return;
 
-    if (this.state === "CALIBRATING" && this._calFlowActive) {
+    // The guided calibration is keyed on its own flag, NOT on this.state. The
+    // generic branch below rewrites state to "CAL REQUIRED"/"MEASURING" on every
+    // reading, which during step 1 knocked state out of "CALIBRATING" and left
+    // step 2's auto-lock permanently disabled ("SETTLING (0/8)" forever).
+    if (this._calFlowActive) {
       this.currentG = grams;
 
       const button = document.getElementById("calReadyBtn");

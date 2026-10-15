@@ -1,11 +1,11 @@
 /**
- * sw.js — Service Worker for Phoneway Scale v5.3.1
+ * sw.js — Service Worker for Phoneway Scale v5.3.2
  *
  * Caches ONLY the live module graph (dead modules removed 2026-10-08,
  * see docs/legacy/DEAD-CODE-2026-10-08.md).
  */
 
-const CACHE = 'phoneway-v5.3.1';
+const CACHE = 'phoneway-v5.3.2';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
