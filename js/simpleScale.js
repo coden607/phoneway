@@ -395,6 +395,8 @@ class SimpleScale {
     }
     const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
     let expectedErrorGrams = null;
+    let calibrationSnr = null;
+    let confidence = 'unknown';
 
     // Refuse to calibrate on a signal the sensor cannot distinguish from its own
     // noise. Below ~3x the standard error of the mean, the "sensitivity" would
@@ -406,15 +408,12 @@ class SimpleScale {
       // Relative error of the sensitivity is about 1/SNR, so a calibration at
       // SNR 5 is already +/-20% (1 g on a 5 g coin). Measured over 40 noise
       // seeds: SNR ~50 gives <=0.1 g, ~10 gives ~0.2-0.5 g, <=3 gives 1-3 g.
-      if (snr < MIN_CALIBRATION_SNR) {
-        return {
-          success: false,
-          snr: snr,
-          error: 'Signal too weak (' + snr.toFixed(1) + 'x noise, need ' + MIN_CALIBRATION_SNR + 'x). ' +
-                 'Use a heavier reference weight or a softer surface, then hold still.'
-        };
-      }
+      // NEVER block calibration. A hard refusal left a weak-signal setup with no
+      // way to use the scale at all (the reading just sat at zero). Instead the
+      // result says how far to trust it, and the number is shown to the user.
       expectedErrorGrams = Number.isFinite(snr) ? knownGrams / snr : 0;
+      calibrationSnr = snr;
+      confidence = snr >= 20 ? 'high' : snr >= MIN_CALIBRATION_SNR ? 'medium' : snr >= 1.5 ? 'low' : 'noise';
     }
 
     // Lock directional tilt vector from calibrated reference load
@@ -455,9 +454,11 @@ class SimpleScale {
        // sensitivity/R² heuristic ("±0.1g (excellent)") described curve-fit
     // shape, never true error, and is removed.
     const claim = this.ledger.accuracyClaim();
-    const expected = expectedErrorGrams != null ? ' (signal/noise suggests about +/-' + expectedErrorGrams.toFixed(1) + ' g)' : '';
-    const estimatedAccuracy = claim.count > 0 ? claim.text + ' (measured)' : 'UNVERIFIED' + expected + ' — run VERIFY';
-    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA, expectedErrorGrams: expectedErrorGrams };
+    let expected = expectedErrorGrams != null ? ' (signal/noise suggests about +/-' + expectedErrorGrams.toFixed(1) + ' g)' : '';
+    if (confidence === 'noise') expected = ' — NOT RELIABLE: the weight barely moved the phone compared with the noise. Use a heavier weight or a softer surface';
+    else if (confidence === 'low') expected = ' — LOW CONFIDENCE (about +/-' + expectedErrorGrams.toFixed(1) + ' g). A heavier weight or softer surface will help';
+    const estimatedAccuracy = claim.count > 0 && confidence !== 'noise' && confidence !== 'low' ? claim.text + ' (measured)' : 'UNVERIFIED' + expected + ' — run VERIFY';
+    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA, expectedErrorGrams: expectedErrorGrams, snr: calibrationSnr, confidence: confidence };
   }
 
   verifyAgainstKnown(knownWeight, options) {

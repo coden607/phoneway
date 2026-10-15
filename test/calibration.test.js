@@ -87,18 +87,25 @@ describe('calibration from the settled average', () => {
     expect(r.cal.accuracy).toMatch(/\+\/-/);
   });
 
-  it('refuses to calibrate when the signal is buried in noise', () => {
-    let refused = 0;
+  it('never blocks calibration, and labels a weak signal honestly', () => {
+    // Regression: a hard refusal left weak-signal setups with no way to use the
+    // scale at all. Calibration must proceed and say how far to trust it.
+    let labelled = 0;
     for (const seed of SEEDS) {
       const r = session({ sigma: 0.003, deflection: 0.0005, seed });
-      if (!r.cal.success) {
-        refused++;
-        expect(r.cal.error).toMatch(/too weak/i);
-        expect(r.cal.snr).toBeLessThan(5);
-        // A refused calibration must not leave the scale looking calibrated.
-        expect(r.scale.calibrated).toBe(false);
+      expect(r.cal.success).toBe(true);
+      expect(r.scale.calibrated).toBe(true);
+      if (r.cal.confidence === 'low' || r.cal.confidence === 'noise') {
+        labelled++;
+        expect(r.cal.accuracy).toMatch(/LOW CONFIDENCE|NOT RELIABLE/);
       }
     }
-    expect(refused).toBeGreaterThanOrEqual(17);
+    expect(labelled).toBeGreaterThanOrEqual(17);
+  });
+
+  it('rates a strong signal high confidence and a moderate one at least medium', () => {
+    expect(session({ sigma: 0.003, deflection: 0.05 }).cal.confidence).toBe('high');
+    const m = session({ sigma: 0.003, deflection: 0.01 }).cal.confidence;
+    expect(['high', 'medium']).toContain(m);
   });
 });
