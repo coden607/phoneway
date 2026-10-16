@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, twilio-removal-*]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gitleaks Scan
+        uses: zricethezav/gitleaks-action@v1.6.0
+        with:
+          config_path: .gitleaks.toml
+          exit_code: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm test
+      - run: python3 -m pip install pytest && pytest test_phone_weighing.py
