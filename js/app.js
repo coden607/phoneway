@@ -523,7 +523,11 @@ class PhonewayApp {
         const hasMinSamples = this._calFlowReadings.length >= 6;
         const stillnessQuality = (this.scale.motionQuality != null) ? this.scale.motionQuality : 0.8;
         const lowVariance = medianDeviation <= Math.max(1.8, stableReading * 0.4);
-        const isSteady = hasMinSamples && lowVariance && (!this.scale.motionBlocked || stillnessQuality >= 0.25);
+        // An empty phone is also perfectly still, so "steady" alone fired the lock
+        // before any weight was placed. Require a real load: the tilt must stand
+        // clear of its own noise.
+        const hasLoad = this.scale.getLoadSnr() >= 6;
+        const isSteady = hasMinSamples && lowVariance && hasLoad && (!this.scale.motionBlocked || stillnessQuality >= 0.25);
 
         if (isSteady) {
           this._calFlowStableCount = Math.min(20, (this._calFlowStableCount || 0) + 1);
@@ -532,7 +536,7 @@ class PhonewayApp {
         }
 
         const stableTarget = 8;
-        const autoLock = (this._calFlowStableCount >= stableTarget) || (elapsed > 3000 && hasMinSamples);
+        const autoLock = hasLoad && ((this._calFlowStableCount >= stableTarget) || (elapsed > 3000 && hasMinSamples));
 
         if (autoLock) {
           if (this._calStep2Interval) {
@@ -636,89 +640,55 @@ class PhonewayApp {
     }
   }
 
-  _getCompetencyPercentile(confidence) {
-    const stdDev = (this.scale && this.scale.stabilityCheck) ? this.scale.stabilityCheck.stdDev : 0.05;
-    const stabilityScore = Math.max(0, Math.min(1, 1 - (stdDev / 0.12)));
-    const motionQuality = (this.scale && typeof this.scale.motionQuality === 'number') ? this.scale.motionQuality : 0.92;
-    const evidence = this.scale ? this.scale.getAccuracyEvidence(confidence) : { confidence: 0.85 };
-    const calScore = this.scale && this.scale.calibrated ? 1.0 : 0.88;
-
-    const claim = this.scale ? this.scale.getLedgerClaim() : null;
-    let ledgerBonus = 0;
-    if (claim && claim.count > 0) {
-      ledgerBonus = claim.maxAbsError <= 0.05 ? 0.08 : (claim.maxAbsError <= 0.1 ? 0.05 : 0.02);
-    }
-
-    const rawPct = (0.35 * stabilityScore + 0.30 * motionQuality + 0.25 * calScore + 0.10 * (evidence.confidence || 0.85) + ledgerBonus) * 100;
-    return Math.min(99.9, Math.max(68.0, rawPct));
-  }
-
-  _getAccuracyTierLabel() {
-    if (!this.scale) return '±0.1g RES';
-    const evidence = this.scale.getAccuracyEvidence();
+  /**
+   * What the accuracy badge shows. Every field is a measurement, not a score:
+   * the verified claim from the ledger if one exists, otherwise the uncertainty
+   * the sensors are producing right now (noise plus how fast the surface is
+   * creeping). The old badge was a weighted formula clamped to 68-99.9% with
+   * "+/-0.1g" printed whenever the scale was calibrated, which a real recording
+   * on an iPhone 14 showed to be false (error was about a gram, not a tenth).
+   */
+  _measuredAccuracy() {
+    const fmt = (g) => (g >= 10 ? g.toFixed(0) : g >= 1 ? g.toFixed(1) : g.toFixed(2));
+    const none = { value: '—', tier: 'NOT CALIBRATED', quality: 0, color: '#ffb300' };
+    if (!this.scale || !this.scale.calibrated) return none;
     const claim = this.scale.getLedgerClaim();
-
-    if (claim && claim.count > 0 && claim.maxAbsError <= 0.05) {
-      return '±0.05g CERT';
+    const u = this.scale.getMeasuredUncertainty();
+    if (claim && claim.count > 0) {
+      const q = Math.max(0, Math.min(100, Math.round(100 * 0.1 / Math.max(0.1, claim.maxAbsError))));
+      return { value: claim.text.replace(/^±/, '±'), tier: 'VERIFIED · ' + claim.count + ' CHECKS', quality: q,
+        color: claim.maxAbsError <= 0.1 ? '#00ff66' : (claim.maxAbsError <= 0.3 ? '#e8c84a' : '#ff8c00') };
     }
-    if (claim && claim.count > 0 && claim.maxAbsError <= 0.1) {
-      return '±0.1g VERIFIED';
-    }
-    if (this.scale.calibrated) {
-      if (evidence.precisionTier === '0.05g') return '±0.05g TIER';
-      if (evidence.precisionTier === '0.1g' || this.scale.isStable) return '±0.1g ACCURATE';
-      return '±0.1g CAL';
-    }
-    return '0.1g RESOLUTION';
+    if (!u) return none;
+    if (u.state === 'sensor-paused') return { value: '—', tier: 'SENSOR PAUSED', quality: 0, color: '#ffb300' };
+    if (u.grams == null) return { value: '—', tier: 'MEASURING…', quality: 0, color: '#ffb300' };
+    const quality = Math.max(0, Math.min(100, Math.round(100 * 0.1 / Math.max(0.1, u.grams))));
+    return {
+      value: '±' + fmt(u.grams) + 'g',
+      tier: (u.state === 'settling' ? 'SURFACE SETTLING' : 'MEASURED NOISE') + ' · UNVERIFIED',
+      quality,
+      color: u.grams <= 0.1 ? '#39ff14' : (u.grams <= 0.5 ? '#e8c84a' : '#ff8c00'),
+    };
   }
 
   _updateAccuracyDisplay(confidence) {
-    const pct = this._getCompetencyPercentile(confidence);
-    const tier = this._getAccuracyTierLabel();
-    const pctStr = pct.toFixed(1) + '%';
-    const roundPct = Math.round(pct);
-
-    // 1. Persistent screen-corner badge (always displayed in top-right corner)
-    const stickyPct = document.getElementById('stickyCornerPct');
-    if (stickyPct) stickyPct.textContent = pctStr;
-    const stickyTier = document.getElementById('stickyCornerTier');
-    if (stickyTier) stickyTier.textContent = tier;
-
-    // 2. LCD display window corner HUD (inside amber bezel)
-    const lcdPct = document.getElementById('lcdCornerPercentile');
-    if (lcdPct) lcdPct.textContent = pctStr;
-    const lcdTier = document.getElementById('lcdCornerTier');
-    if (lcdTier) lcdTier.textContent = tier;
-
-    // 3. Header accuracy & competency block
-    const accDigits = document.getElementById('accDigits');
-    if (accDigits) accDigits.textContent = roundPct;
+    const m = this._measuredAccuracy();
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set('stickyCornerPct', m.value);
+    set('stickyCornerTier', m.tier);
+    set('lcdCornerPercentile', m.value);
+    set('lcdCornerTier', m.tier);
+    set('accDigits', m.value.replace(/^±/, '').replace(/g$/, ''));
 
     const accBar = document.getElementById('accBar');
     if (accBar) {
-      accBar.style.width = roundPct + '%';
-      accBar.className = 'acc-bar-fill ' + (
-        roundPct >= 90 ? 'acc-high' :
-        roundPct >= 80 ? 'acc-good' :
-        roundPct >= 65 ? 'acc-mid' : 'acc-low'
-      );
+      accBar.style.width = m.quality + '%';
+      accBar.className = 'acc-bar-fill ' + (m.quality >= 90 ? 'acc-high' : m.quality >= 60 ? 'acc-good' : m.quality >= 30 ? 'acc-mid' : 'acc-low');
     }
-
-    // 4. Accuracy claim label
     const precEl = document.getElementById('precEst');
     if (precEl) {
-      let text, color;
-      const claim = this.scale.getLedgerClaim();
-      if (!this.scale.calibrated) {
-        text = "0.1g RES · " + pctStr; color = "#ffb300";
-      } else if (!claim || !claim.count) {
-        text = "±0.1g CAL · " + pctStr; color = "#39ff14";
-      } else {
-        text = claim.text + " · " + claim.count + " verifies (" + pctStr + ")";
-        color = claim.maxAbsError <= 0.1 ? "#00ff66" : (claim.maxAbsError <= 0.3 ? "#e8c84a" : "#ff8c00");
-      }
-      precEl.textContent = text;
-      precEl.style.color = color;
+      precEl.textContent = this.scale && this.scale.calibrated ? m.value + ' · ' + m.tier : '0.1g RESOLUTION · NOT CALIBRATED';
+      precEl.style.color = m.color;
     }
   }
 

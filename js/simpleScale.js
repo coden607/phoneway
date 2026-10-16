@@ -46,6 +46,8 @@ function batchMeansSE(values, blocks = 5) {
   return Math.sqrt(variance / blocks);
 }
 
+const SENSOR_GAP_MS = 800;
+
 class SimpleScale {
   constructor() {
     this.active = false;
@@ -55,6 +57,11 @@ class SimpleScale {
     this.baseline = null;
     this.sensitivity = 150;
     this.directionalProj = new DirectionalProjection(0.0003);
+    // Measured-uncertainty inputs (see getMeasuredUncertainty).
+    this._driftBins = [];          // 1 s bins of the tilt vector, to measure creep
+    this._driftBin = { t: 0, dx: 0, dy: 0, n: 0 };
+    this._lastMotionAt = 0;
+    this.sensorGapUntil = 0;
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
     this.tiltCorrector = new TiltCorrector();
@@ -147,6 +154,12 @@ class SimpleScale {
   _handleMotion(e) {
     const accel = e.accelerationIncludingGravity;
     if (!accel) return;
+    // Safari can stop delivering motion events for several seconds (a real
+    // recording lost 9.8 s mid-measurement). Averaging across such a gap mixes
+    // two different situations, so drop what was collected and say so.
+    const nowMs = Date.now();
+    if (this._lastMotionAt && nowMs - this._lastMotionAt > SENSOR_GAP_MS) this._onSensorGap();
+    this._lastMotionAt = nowMs;
     let x = accel.x != null ? accel.x : 0;
     let y = accel.y != null ? accel.y : 0;
     let z = accel.z != null ? accel.z : 0;
@@ -229,6 +242,7 @@ class SimpleScale {
     }
     const dx = this.filteredAccel.x - this.baseline.x;
     const dy = this.filteredAccel.y - this.baseline.y;
+    this._trackDrift(dx, dy);
     const avgDx = this.maDx.update(dx);
     const avgDy = this.maDy.update(dy);
     // Directional tilt projection: eliminates Rayleigh positive noise floor bias (E=0 at rest)
@@ -302,6 +316,77 @@ class SimpleScale {
       self._tare_resolve = resolve;
       setTimeout(function(){ if (self._tare_in_progress) self._finishTare(); }, 4000);
     });
+  }
+
+  _onSensorGap() {
+    this.maDx.reset(); this.maDy.reset();
+    this.stabilityCheck.reset();
+    this.stableCounter = 0;
+    this.isStable = false;
+    this._driftBins = [];
+    this._driftBin = { t: 0, dx: 0, dy: 0, n: 0 };
+    this.sensorGapUntil = Date.now() + 2000;
+  }
+
+  /**
+   * How many times larger the tilt away from the zero baseline is than its own
+   * noise. Near 0 on an empty, still phone; large once a weight is on it.
+   */
+  getLoadSnr() {
+    if (this.maDx.length < 40 || this.maDy.length < 40) return 0;
+    const se = Math.hypot(batchMeansSE(this.maDx.getAll()), batchMeansSE(this.maDy.getAll()));
+    const tilt = Math.hypot(this.maDx.mean, this.maDy.mean);
+    return se > 0 ? tilt / se : (tilt > 0 ? Infinity : 0);
+  }
+
+  /** Keeps 1-second means of the tilt vector so creep of the surface can be measured. */
+  _trackDrift(dx, dy) {
+    const b = this._driftBin;
+    const now = Date.now();
+    if (!b.n) b.t = now;
+    b.dx += dx; b.dy += dy; b.n++;
+    if (now - b.t >= 1000) {
+      this._driftBins.push({ t: b.t, dx: b.dx / b.n, dy: b.dy / b.n });
+      if (this._driftBins.length > 30) this._driftBins.shift();
+      this._driftBin = { t: 0, dx: 0, dy: 0, n: 0 };
+    }
+  }
+
+  /**
+   * How far off the current reading could be, in grams, from what the sensors
+   * are actually doing. Not a formula about calibration: it combines
+   *  - noise: standard error of the averaged tilt signal (batch means, so it is
+   *    honest for the smoothed samples), times the calibrated sensitivity;
+   *  - creep: how fast the tilt is drifting (a soft surface keeps settling), times
+   *    the ~10 s a weighing takes. A real iPhone recording on a towel drifted
+   *    5 degrees in a minute, about 50x more than a 5 g coin moves it.
+   * Returns null until calibrated.
+   */
+  getMeasuredUncertainty() {
+    if (!this.calibrated || !this.baseline || !(this.sensitivity > 0)) return null;
+    if (Date.now() < this.sensorGapUntil) return { grams: null, state: 'sensor-paused' };
+    if (this.maDx.length < 40 || this.maDy.length < 40) return { grams: null, state: 'collecting' };
+    const seSignal = Math.hypot(batchMeansSE(this.maDx.getAll()), batchMeansSE(this.maDy.getAll()));
+    const noiseGrams = seSignal * this.sensitivity;
+    let driftGramsPerSec = 0;
+    const bins = this._driftBins.slice(-15);
+    if (bins.length >= 5) {
+      const t = bins.map((x) => (x.t - bins[0].t) / 1000);
+      const slope = (ys) => {
+        const n = ys.length, mt = t.reduce((a, c) => a + c, 0) / n, my = ys.reduce((a, c) => a + c, 0) / n;
+        let num = 0, den = 0;
+        for (let i = 0; i < n; i++) { num += (t[i] - mt) * (ys[i] - my); den += (t[i] - mt) ** 2; }
+        return den > 0 ? num / den : 0;
+      };
+      driftGramsPerSec = Math.hypot(slope(bins.map((x) => x.dx)), slope(bins.map((x) => x.dy))) * this.sensitivity;
+    }
+    const WEIGH_SECONDS = 10;
+    const driftGrams = driftGramsPerSec * WEIGH_SECONDS;
+    return {
+      grams: Math.hypot(noiseGrams, driftGrams),
+      noiseGrams, driftGrams, driftGramsPerSec,
+      state: driftGrams > noiseGrams ? 'settling' : 'noise-limited',
+    };
   }
 
   _finishTare() {

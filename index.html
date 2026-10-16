@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
   <title>PhoneWeigh v5.2 — Digital Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=5.3.2"/>
+  <link rel="manifest"          href="manifest.json?v=5.3.3"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=5.3.2"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.3.3"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,7 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script src="js/versionCheck.js?v=5.3.2"></script>
+<script src="js/versionCheck.js?v=5.3.3"></script>
 </head>
 <body>
 
@@ -79,8 +79,8 @@
   <div id="stickyCornerBadge" class="sticky-corner-badge" aria-label="Scale Competency and Accuracy Percentile" title="Live Scale Competency & Accuracy Percentile">
     <span class="sticky-corner-dot"></span>
     <span id="stickyCornerTitle" class="sticky-corner-title">ACCURACY</span>
-    <span id="stickyCornerPct" class="sticky-corner-pct">98.5%</span>
-    <span id="stickyCornerTier" class="sticky-corner-tier">±0.1g</span>
+    <span id="stickyCornerPct" class="sticky-corner-pct">—</span>
+    <span id="stickyCornerTier" class="sticky-corner-tier">NOT CALIBRATED</span>
   </div>
 
   <!-- ── Header ─────────────────────────────────────────────── -->
@@ -115,10 +115,10 @@
 
     <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
     <div id="accuracyBlock" class="corner-accuracy-block" aria-label="Scale Competency and Accuracy Percentile">
-      <div class="acc-label">ACCURACY / COMPETENCY</div>
+      <div class="acc-label">MEASURED ERROR ±</div>
       <div class="acc-display">
-        <div id="accDigits" class="acc-seg-wrap">98</div>
-        <div class="acc-pct-sign">%</div>
+        <div id="accDigits" class="acc-seg-wrap">—</div>
+        <div class="acc-pct-sign">g</div>
       </div>
       <div class="acc-bar-wrap">
         <div class="acc-bar-fill" id="accBar"></div>
@@ -140,8 +140,8 @@
       <div id="lcdCornerHud" class="lcd-corner-hud" aria-label="Scale Competency and Accuracy Percentile">
         <span class="corner-hud-dot"></span>
         <span id="lcdCornerLabel" class="corner-hud-label">ACCURACY</span>
-        <span id="lcdCornerPercentile" class="corner-hud-pct">98.5%</span>
-        <span id="lcdCornerTier" class="corner-hud-tier">±0.1g</span>
+        <span id="lcdCornerPercentile" class="corner-hud-pct">—</span>
+        <span id="lcdCornerTier" class="corner-hud-tier">NOT CALIBRATED</span>
       </div>
       <div id="digitDisplay" class="seg-display"></div>
       <div class="display-unit" id="unitLabel">g</div>
@@ -763,7 +763,7 @@
 </div>
 
 <!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
-<script src="js/errorTrap.js?v=5.3.2"></script>
+<script src="js/errorTrap.js?v=5.3.3"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -920,7 +920,7 @@
 
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=5.3.2"></script>
+<script type="module" src="js/app.js?v=5.3.3"></script>
 
 
 
