@@ -1,0 +1,44 @@
+name: Scheduled Health Guard
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report-regression:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const title = `Automated health check failed: ${run.head_branch}`;
+            const body = [
+              "The scheduled/continuous quality gate detected a regression.",
+              "",
+              `Run: ${run.html_url}`,
+              `Commit: ${run.head_sha}`,
+              "",
+              "Review the uploaded browser artifacts, fix the underlying cause, and merge through the normal review process."
+            ].join("\n");
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "automated-health-check"
+            });
+            if (!existing.data.length) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["automated-health-check"]
+              });
+            }

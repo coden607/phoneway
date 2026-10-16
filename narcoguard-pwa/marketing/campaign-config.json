@@ -1,0 +1,68 @@
+{
+  "campaign": {
+    "name": "NarcoGuard NG Watch Funding",
+    "goal": 24584,
+    "watches": 80,
+    "costPerWatch": 307.3,
+    "location": "Broome County, NY",
+    "startDate": "2025-01-01",
+    "organization": "Broome Estates LLC",
+    "founder": "Stephen Blanford"
+  },
+  "links": {
+    "gofundme": "https://gofund.me/9acf270ea",
+    "app": "https://narcoguard.app",
+    "demo": "https://narcoguard.app",
+    "github": "https://github.com/coden607/narcoguard-pwa"
+  },
+  "contact": {
+    "email": "narcoguard607@gmail.com",
+    "organization": "Broome Estates LLC",
+    "founder": "Stephen Blanford",
+    "location": "Binghamton, NY"
+  },
+  "social": {
+    "hashtags": {
+      "primary": ["NarcoGuard", "SaveLives", "OpioidCrisis", "EndOverdose"],
+      "secondary": ["Binghamton", "BroomeCounty", "HarmReduction", "OverdosePrevention", "Naloxone"],
+      "features": ["HeroNetworkConcept", "PrototypeDevelopment", "RecoverySupport", "NarcoGuardNG"],
+      "tiktok": ["fyp", "viral", "saveliveschallenge", "recovery", "harmreduction"],
+      "youtube": ["shorts", "medtech", "smartwatch", "healthtech"]
+    },
+    "platforms": ["twitter", "facebook", "instagram", "linkedin", "reddit", "tiktok", "youtube"],
+    "postFrequency": "daily",
+    "timezone": "America/New_York"
+  },
+  "messaging": {
+    "tagline": "Help fund responsible development of the NarcoGuard NG concept",
+    "mission": "Fighting the opioid crisis with technology and community",
+    "callToAction": "Support transparent prototype development and community-led overdose prevention in Broome County",
+    "urgency": "Overdose remains a serious public-health crisis. Help us explore a responsible, evidence-led response.",
+    "personal": "I'm a person in recovery who has lost friends to overdose. I started NarcoGuard to explore better ways to connect people with timely help."
+  },
+  "videoContent": {
+    "platforms": ["tiktok", "youtube_shorts", "instagram_reels"],
+    "themes": ["problem_awareness", "technology_demo", "personal_story", "call_to_action", "milestone_update"],
+    "frequency": "daily"
+  },
+  "freeAdvertisingSites": [
+    "reddit.com/r/harmreduction",
+    "reddit.com/r/opiates",
+    "reddit.com/r/addiction",
+    "reddit.com/r/recovery",
+    "reddit.com/r/gofundme",
+    "reddit.com/r/assistance",
+    "reddit.com/r/newyork",
+    "reddit.com/r/binghamton",
+    "reddit.com/r/upstate_new_york",
+    "reddit.com/r/charity",
+    "reddit.com/r/nonprofit",
+    "craigslist.org/community",
+    "facebook.com/groups",
+    "nextdoor.com",
+    "linkedin.com",
+    "producthunt.com",
+    "indiehackers.com",
+    "hackernews"
+  ]
+}

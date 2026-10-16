@@ -1,0 +1,50 @@
+name: Project work
+description: Plan a verifiable product, engineering, integration, or operations outcome.
+title: "[Work]: "
+labels: ["priority:normal"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include secrets or personal, health, location, authentication, or payment data."
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What user or operational outcome should change?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: State what is included and explicitly excluded.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] Observable, testable result"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Highest risk area
+      options:
+        - None identified
+        - Emergency or safety behavior
+        - Privacy or security
+        - Authentication or authorization
+        - Supabase data or migration
+        - Vercel production or availability
+        - Stripe payment or fulfillment
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification and rollback
+      description: List automated/manual checks and how to reverse the change safely.
+    validations:
+      required: true

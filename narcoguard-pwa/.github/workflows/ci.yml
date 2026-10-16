@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run validate:production
+      - run: npm run validate:env
+      - run: npm run typecheck
+      - run: npm run validate:supabase
+      - run: npm run validate:claims
+      - run: npm run test:signals
+      - run: npm run test:vitals
+      - run: npm run test:guardian
+      - run: npm run test:constitution
+      - run: npm run test:features
+      - run: npm run validate:watch-design
+      - name: Dependency audit
+        run: npm run audit:deps
+      - run: npm run build
+
+  pwa-browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:pwa
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-pwa-report
+          path: playwright-report/
+          retention-days: 14
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Start production server
+        run: npm start > /tmp/narcoguard-next.log 2>&1 &
+      - name: Wait for production server
+        run: npx --yes wait-on@8.0.3 http://127.0.0.1:3000/
+      - name: Run Lighthouse assertions
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.js

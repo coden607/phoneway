@@ -1,0 +1,14 @@
+{
+  "persona": "Mission Control",
+  "slack": {
+    "enabled": true
+  },
+  "linear": {
+    "enabled": true,
+    "createOn": ["issues.opened"]
+  },
+  "notion": {
+    "enabled": true,
+    "createOn": ["issues.opened"]
+  }
+}

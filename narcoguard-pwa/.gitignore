@@ -1,0 +1,65 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+.next-pwa-smoke/
+/out/
+
+# production
+/build
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+.env*.local
+.env.production
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+marketing/posts/
+marketing/graphics/
+marketing/stats/
+
+# Local scratch artifact (not application source)
+/gjhv
+/ai-vocals-studio/
+/ai-vocals-studio-airbearme/
+hj
+p.py
+.env*
+.env
+.env.*
+!.env.example
+node_modules
+.next
+.env.local
+.env.*.local
+social.env
+.oauth/
+tokens/
+*.token.json
+
+# Lighthouse CI local output
+.lighthouseci/

@@ -1,0 +1,49 @@
+name: Audio Pipeline CI
+
+on:
+  push:
+    branches: [audio-pipeline-upgrade]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install watchdog librosa speechbrain numpy scipy
+
+      - name: Prepare dummy audio
+        run: |
+          mkdir -p inputs
+          ffmpeg -f lavfi -i sine=frequency=440:duration=1 -c:a pcm_s16le dummy.wav
+          mv dummy.wav inputs/
+
+      - name: Run watchdog service (background)
+        run: |
+          nohup python audio_pipeline/watchdog_service.py &
+          sleep 5
+        timeout-minutes: 2
+
+      - name: Verify outputs
+        run: |
+          ls outputs
+          # Check for expected files
+          if [ -d outputs/dummy ]; then echo "Output directory exists"; else exit 1; fi
+          if [ -f outputs/dummy/vocals.wav ]; then echo "vocals exists"; else exit 1; fi
+          if [ -f outputs/dummy/instrumental.wav ]; then echo "instrumental exists"; else exit 1; fi
+          if [ -f outputs/dummy/metadata.json ]; then echo "metadata exists"; else exit 1; fi
+          CONF=$(jq .confidence outputs/dummy/metadata.json)
+          echo "Confidence: $CONF"
+          python -c "import sys, json; data=json.load(open('outputs/dummy/metadata.json')); sys.exit(0) if data.get('confidence',0)>0.6 else sys.exit(1)"

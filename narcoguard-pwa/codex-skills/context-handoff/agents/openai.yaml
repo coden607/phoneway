@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Handoff"
+  short_description: "Create a safe continuation brief for another model"
+  default_prompt: "Prepare a privacy-filtered continuation handoff for the current task."

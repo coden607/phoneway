@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "next-devtools",
+    "playwright"
+  ]
+}

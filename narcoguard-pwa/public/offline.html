@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NarcoGuard - Offline</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0a0f1e 0%, #1a2332 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+    .container {
+      padding: 2rem;
+      max-width: 600px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: #00d9ff;
+    }
+    p {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+      opacity: 0.9;
+    }
+    .logo { width: 128px; height: 128px; border-radius: 24px; margin: 0 auto 1rem; display: block; }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+    .emergency-note {
+      background: rgba(255, 50, 50, 0.2);
+      border: 2px solid #ff3232;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-top: 2rem;
+    }
+    .emergency-note strong {
+      color: #ff3232;
+    }
+    button {
+      background: #00d9ff;
+      color: #0a0f1e;
+      border: none;
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    button:hover {
+      background: #00b8dd;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img class="logo" src="/images/narcoguard-icon-256.jpeg" alt="NarcoGuard" width="128" height="128">
+    <h1>You're Offline</h1>
+    <p>
+      NarcoGuard requires an internet connection to access real-time monitoring and emergency services.
+      Some features may be limited while offline.
+    </p>
+    
+    <div class="emergency-note">
+      <strong>⚠️ EMERGENCY?</strong>
+      <p>If this is an emergency, please call <a href="tel:911" style="color: #00d9ff;">911</a> directly.</p>
+    </div>
+    
+    <button onclick="window.location.reload()">Try Again</button>
+  </div>
+</body>
+</html>

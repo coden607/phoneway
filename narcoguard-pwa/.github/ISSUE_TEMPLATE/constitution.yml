@@ -1,0 +1,59 @@
+name: Founding Constitution submission
+description: Advisory support, objection, proposal, evidence, harm report, or challenge to the unratified draft
+title: "[Constitution] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public GitHub issue. Do not include health history, location, contact details, or another person's private information. For sensitive feedback use the email address on the Constitution page. This submission is advisory and cannot change emergency behavior or the Constitution by itself.
+  - type: dropdown
+    id: action
+    attributes:
+      label: Type of submission
+      options:
+        - Support
+        - Object
+        - Propose Change
+        - Submit Evidence
+        - Identify Harm
+        - Constitutional Challenge
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: Request or concern
+      description: Identify the section and describe the change, evidence, concern, or challenge without private details.
+    validations:
+      required: true
+  - type: textarea
+    id: affected
+    attributes:
+      label: People affected and possible harms
+      description: Describe groups or situations, without identifying individuals.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting and contrary evidence
+      description: Link public sources and explain uncertainty; either side may be left open.
+  - type: textarea
+    id: objections
+    attributes:
+      label: Strongest objections and alternatives
+      description: What would someone who disagrees say? Include minority objections as the discussion develops.
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Rights, privacy, security, and conflicts
+      description: Note any relevant tradeoffs or financial conflicts without revealing private information.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed next step or outcome to review later
+  - type: checkboxes
+    id: public
+    attributes:
+      label: Public submission acknowledgement
+      options:
+        - label: I understand this issue and its comments are public and advisory; they do not automatically change the Constitution or emergency functions.
+          required: true

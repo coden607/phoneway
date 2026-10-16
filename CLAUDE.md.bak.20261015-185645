@@ -1,0 +1,22 @@
+# Project init — /root/main-repo (always-on contract)
+
+Inherits [/root/CLAUDE.md](file:///root/CLAUDE.md) and [/root/.claude/CLAUDE.md](file:///root/.claude/CLAUDE.md). Nothing here is optional.
+
+## Every task, no reminder needed
+1. **route-through-continuityos** — all work, routing, memory and safety invariants flow through Continuity OS: [/root/Projects/continuity-os](file:///root/Projects/continuity-os), daemon [http://localhost:3030](http://localhost:3030). Zero-token local capabilities before any model call.
+2. **Canonical skills** — [/root/.coden607/skills](file:///root/.coden607/skills) (github.com/coden607/skills). Read [bundle.md](file:///root/.coden607/skills/bundle.md), load only the 1–3 matching `SKILL.md` files.
+3. **compress-token-spend** — cheapest capable tier; search/grep before reading files; shortest complete reply; stable prompt prefix for cache hits; report deltas, not narration.
+4. **route-with-jev / jev-gate** — every routing, gating, classification or guardrail decision goes to Jev (`POST http://localhost:3030/api/jev`, or [decide.py](file:///root/.coden607/skills/jev-gate/scripts/decide.py)), confidence floor **0.72**. Never burn a full LLM call on these.
+5. **anticipate** — end every substantive turn with **Result → Blocker → Next action** (`do_now` / `suggest` / `ask_first`).
+6. **route-interrupts** — mid-task message ≠ stop: classify as steering / side question / new task / urgent. Never drop the active task. "Stop" stops now.
+7. **maintain-second-brain** — durable fact → STATE in [second-brain/MEMORY.md](file:///root/Projects/continuity-os/second-brain/MEMORY.md), EVENT in `second-brain/daily/YYYY-MM-DD.md`.
+8. **isolate-agent-runs** — gate destructive, irreversible, monetary, outbound or production actions. Ask first.
+9. **always-format-clickable-links** — every URL and file path as a Markdown link.
+
+First reply line of every turn: `Skills: <names applied>`.
+
+## Enforcement
+Hook (not prompt memory): [always-on.sh](file:///root/.coden607/hooks/always-on.sh) fires on `SessionStart` and `UserPromptSubmit` via [/root/.claude/settings.json](file:///root/.claude/settings.json).
+
+## Repo / account rules
+GitHub account `coden607` only; new repos private by default. Planning: `plan-create-prd` → `plan-architecture` → `plan-create-stories`; ship via `run-software-factory` (never raise autonomy unasked).
