@@ -10,3 +10,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 health-review.md
+__pycache__/
+*.py[cod]
+.pytest_cache/
