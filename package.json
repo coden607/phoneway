@@ -11,6 +11,6 @@
     "ci": "npm run check && npm test && npm run test:accuracy"
   },
   "devDependencies": {
-    "vitest": "^1.6.1"
+    "vitest": "^4.1.12"
   }
 }
