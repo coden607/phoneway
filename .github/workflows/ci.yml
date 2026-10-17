@@ -67,7 +67,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-      - run: npx --yes playwright@1.55.1 install --with-deps chromium
+      - run: npm install --no-save playwright@1.55.1 && npx playwright install --with-deps chromium
       - name: Start app
         run: |
           npm run serve > /tmp/phoneweigh.log 2>&1 &
