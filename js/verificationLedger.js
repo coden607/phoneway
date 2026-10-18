@@ -7,7 +7,7 @@
  *
  * Every verification (measuring a known reference weight) appends one record:
  *   { timestamp, referenceWeight, measuredError, deviceModel }
- * The displayed accuracy claim is a pure function of the last N records:
+ * The displayed accuracy claim is a pure function of a COMPLETE recent window:
  *   claim = ceil-to-0.1g of the worst |measuredError| in the window.
  * No sensitivity heuristics, no curve-fit shape guesses, no marketing.
  *
@@ -17,12 +17,12 @@
 
 const LEDGER_KEY = 'phoneway_v5_ledger';
 const DEFAULT_MAX_ENTRIES = 50;
-const CLAIM_WINDOW = 5; // last N verifications drive the public claim
+const CLAIM_WINDOW = 5;
 
 function bestEffortStorage() {
   try {
     if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
-  } catch (e) { /* private mode etc. */ }
+  } catch (e) {}
   const mem = new Map();
   return {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -34,14 +34,12 @@ function bestEffortStorage() {
 function bestEffortDeviceModel() {
   try {
     if (typeof navigator !== 'undefined' && navigator.userAgent) return navigator.userAgent;
-  } catch (e) { /* non-browser env */ }
+  } catch (e) {}
   return 'unknown device';
 }
 
 function roundUpTenth(g) {
   if (!Number.isFinite(g) || g <= 0) return 0.1;
-  // Always round UP: exact tenths (0.4, 0.5) jump to the next band —
-  // a measured 0.4g error claims ±0.5g, never ±0.4g. We under-promise.
   const t = g * 10;
   const nearest = Math.round(t);
   if (Math.abs(t - nearest) < 1e-9) return (nearest + 1) / 10;
@@ -72,10 +70,9 @@ class VerificationLedger {
   _save() {
     try {
       this.storage.setItem(LEDGER_KEY, JSON.stringify(this.entries));
-    } catch (e) { /* storage full / unavailable — ledger degrades to in-memory */ }
+    } catch (e) {}
   }
 
-  /** Append one verification record. Returns the stored entry, or null if invalid. */
   record(entry) {
     if (!entry || !Number.isFinite(entry.referenceWeight) || entry.referenceWeight <= 0) return null;
     if (!Number.isFinite(entry.measuredError)) return null;
@@ -93,47 +90,99 @@ class VerificationLedger {
     return stored;
   }
 
-  /** Last n entries (oldest → newest). n omitted = all. */
   recent(n) {
     if (!Number.isFinite(n) || n <= 0) return this.entries.slice();
     return this.entries.slice(-n);
   }
 
-  /** Error statistics over the last n verifications. Null when empty. */
   stats(n) {
     const sample = this.recent(n);
     if (!sample.length) return null;
-    const abs = sample.map(function (e) { return Math.abs(e.measuredError); });
+    const errors = sample.map(function (e) { return e.measuredError; });
+    const abs = errors.map(Math.abs);
+    const meanError = errors.reduce(function (a, b) { return a + b; }, 0) / errors.length;
     const meanAbsError = abs.reduce(function (a, b) { return a + b; }, 0) / abs.length;
+    const rmse = Math.sqrt(errors.reduce(function (a, b) { return a + b * b; }, 0) / errors.length);
     const maxAbsError = Math.max.apply(null, abs);
-    return { count: sample.length, meanAbsError: meanAbsError, maxAbsError: maxAbsError };
+    return {
+      count: sample.length,
+      meanError,
+      meanAbsError,
+      rmse,
+      maxAbsError
+    };
   }
 
   /**
-   * The public accuracy claim — a pure function of recorded measurements.
-   * Claim = worst |error| in the window, rounded UP to the nearest 0.1g.
-   * Empty ledger → explicitly unverified. We would rather say "we don't know"
-   * than invent a number.
+   * Public claim. A numeric claim is withheld until the requested verification
+   * window is complete. The default public window is CLAIM_WINDOW (5).
    */
   accuracyClaim(n) {
-    const window = Number.isFinite(n) && n > 0 ? n : CLAIM_WINDOW;
+    const window = Number.isFinite(n) && n > 0 ? Math.floor(n) : CLAIM_WINDOW;
     const s = this.stats(window);
     if (!s) {
-      return { text: 'UNVERIFIED', detail: 'run VERIFY with a known weight', count: 0, meanAbsError: null, maxAbsError: null };
+      return {
+        text: 'UNVERIFIED',
+        detail: 'run VERIFY with a known weight',
+        count: 0,
+        required: window,
+        remaining: window,
+        ready: false,
+        meanError: null,
+        meanAbsError: null,
+        rmse: null,
+        maxAbsError: null
+      };
     }
-    const claim = roundUpTenth(Math.max(s.meanAbsError, s.maxAbsError));
+    if (s.count < window) {
+      const remaining = window - s.count;
+      return {
+        text: 'UNVERIFIED',
+        detail: remaining + ' more verification' + (remaining === 1 ? '' : 's') + ' required',
+        count: s.count,
+        required: window,
+        remaining,
+        ready: false,
+        meanError: s.meanError,
+        meanAbsError: s.meanAbsError,
+        rmse: s.rmse,
+        maxAbsError: s.maxAbsError
+      };
+    }
+    const claim = roundUpTenth(s.maxAbsError);
     return {
       text: '±' + claim.toFixed(1) + 'g',
       detail: 'measured on this device — worst of your last ' + s.count + ' verifies',
       count: s.count,
+      required: window,
+      remaining: 0,
+      ready: true,
+      meanError: s.meanError,
       meanAbsError: s.meanAbsError,
+      rmse: s.rmse,
       maxAbsError: s.maxAbsError
+    };
+  }
+
+  /**
+   * Portable, read-only diagnostic payload for bug reports and calibration
+   * review. No mutation and no hidden accuracy inference.
+   */
+  exportSnapshot(n) {
+    const window = Number.isFinite(n) && n > 0 ? Math.floor(n) : CLAIM_WINDOW;
+    return {
+      schema: 1,
+      exportedAt: Date.now(),
+      claimWindow: window,
+      claim: this.accuracyClaim(window),
+      stats: this.stats(window),
+      entries: this.recent(window).map(function (entry) { return { ...entry }; })
     };
   }
 
   clear() {
     this.entries = [];
-    try { this.storage.removeItem(LEDGER_KEY); } catch (e) { /* ignore */ }
+    try { this.storage.removeItem(LEDGER_KEY); } catch (e) {}
   }
 }
 
