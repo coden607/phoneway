@@ -88,10 +88,14 @@ class SimpleScale {
     this.kalmanX = new SimpleKalman({ R: 0.002, Q: 0.0002 });
     this.kalmanY = new SimpleKalman({ R: 0.002, Q: 0.0002 });
     this.kalmanZ = new SimpleKalman({ R: 0.005, Q: 0.0005 });
-    this.weightKalman = new AdaptiveKalman({ R: 0.06, Q: 0.003 });
-    this.emaWeight = new EMA(0.08);
-    this.stabilityCheck = new MovingAverage(60);
-    this.deadbandThreshold = 0.02; // Reduced to 0.02g for crisp 0.1g resolution
+    this.weightKalman = new AdaptiveKalman({ R: 0.10, Q: 0.0015 });
+    this.emaWeight = new EMA(0.045);
+    this.displayEma = new EMA(0.12);
+    this.stabilityCheck = new MovingAverage(90);
+    this.deadbandThreshold = 0.05; // display hysteresis: suppress visible jitter smaller than half a display step
+    this.displaySlewPerSample = 0.08; // cap transient display jumps while still tracking real load changes
+    this._calibrationStableSince = 0;
+    this._calibrationLastDiagnostics = null;
     this.lastDisplayValue = 0;
     this.stableCounter = 0;
     this._tare_in_progress = false;
@@ -257,9 +261,9 @@ class SimpleScale {
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
     const stdDev = this.stabilityCheck.stdDev;
-    const isNowStable = this.stabilityCheck.isFull && stdDev < (this.calibrated ? 0.05 : 0.08);
+    const isNowStable = this.stabilityCheck.isFull && stdDev < (this.calibrated ? 0.04 : 0.065);
     if (isNowStable) this.stableCounter++; else this.stableCounter = 0;
-    const trulyStable = this.stableCounter > (this.calibrated ? 30 : 25);
+    const trulyStable = this.stableCounter > (this.calibrated ? 45 : 35);
     const emaG = this.emaWeight.update(rawG);
     if (trulyStable && !this.isStable && rawG > 0.05 && this.onStable) this.onStable(emaG);
     this.isStable = trulyStable;
@@ -267,9 +271,19 @@ class SimpleScale {
       const trimmed = this._trimmedMean(this.stabilityCheck.getAll(), 0.15);
       this.displayWeight = this._toTenth(this._biasCorrect(trimmed));
       this.lastDisplayValue = this.displayWeight;
-    } else if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.03) {
-      this.displayWeight = emaG;
-      this.lastDisplayValue = emaG;
+    } else {
+      // Keep the live number readable instead of mirroring every sensor wobble.
+      // EMA + hysteresis + slew limiting suppresses bounce without pretending the
+      // reading is stable; the STABLE flag remains governed by the raw window.
+      const target = this.displayEma.update(emaG);
+      const diff = target - this.lastDisplayValue;
+      if (Math.abs(diff) >= this.deadbandThreshold || target < 0.03) {
+        const step = Math.max(-this.displaySlewPerSample, Math.min(this.displaySlewPerSample, diff));
+        this.displayWeight = target < 0.03 ? 0 : this.lastDisplayValue + step;
+        this.lastDisplayValue = this.displayWeight;
+      } else {
+        this.displayWeight = this.lastDisplayValue;
+      }
     }
     const stabilityScore = Math.max(0, 1 - stdDev / 0.15);
     const surfaceScore = this._getSurfaceQualityScore();
@@ -302,7 +316,7 @@ class SimpleScale {
     this.medX.reset(); this.medY.reset(); this.medZ.reset();
     this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset();
-    this.stabilityCheck.reset(); this.emaWeight.reset();
+    this.stabilityCheck.reset(); this.emaWeight.reset(); this.displayEma.reset();
     this.stableCounter = 0;
     this.tempComp.calibrateZero();
     this._tare_xs = []; this._tare_ys = []; this._tare_zs = [];
@@ -455,13 +469,61 @@ class SimpleScale {
     }
   }
 
-  calibrate(knownGrams) {
+  getCalibrationReadiness(knownGrams) {
+    const grams = Number(knownGrams);
+    const sampleCount = Math.min(this.maDx.length, this.maDy.length);
+    const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
+    const se = sampleCount >= 20
+      ? Math.hypot(batchMeansSE(this.maDx.getAll()), batchMeansSE(this.maDy.getAll()))
+      : Infinity;
+    const snr = Number.isFinite(se) && se > 0 ? rawDelta / se : (rawDelta > 0 && se === 0 ? Infinity : 0);
+    const stdDev = this.stabilityCheck.stdDev;
+    const enoughSamples = sampleCount >= 80;
+    const stableWindow = this.stabilityCheck.isFull && Number.isFinite(stdDev) && stdDev <= 0.065;
+    const motionOk = !this.motionBlocked && this.motionQuality >= 0.35;
+    const loadDetected = snr >= 6;
+    const now = Date.now();
+    if (enoughSamples && stableWindow && motionOk && loadDetected) {
+      if (!this._calibrationStableSince) this._calibrationStableSince = now;
+    } else {
+      this._calibrationStableSince = 0;
+    }
+    const stableMs = this._calibrationStableSince ? now - this._calibrationStableSince : 0;
+    const settled = stableMs >= 2500;
+    const reasons = [];
+    if (!enoughSamples) reasons.push('collecting sensor samples');
+    if (!stableWindow) reasons.push('reading still bouncing');
+    if (!motionOk) reasons.push('phone is moving');
+    if (!loadDetected) reasons.push('reference load is too weak');
+    if (enoughSamples && stableWindow && motionOk && loadDetected && !settled) reasons.push('waiting for 2.5 s steady hold');
+    const result = { ready: enoughSamples && stableWindow && motionOk && loadDetected && settled,
+      sampleCount, snr, stdDev, stableMs, rawDelta, knownGrams: grams, reasons };
+    this._calibrationLastDiagnostics = result;
+    return result;
+  }
+
+  getCalibrationDiagnostics() {
+    const q = this.getCalibrationQuality();
+    const points = this.multiCal.points.map(p => ({ grams: p.grams, deltaA: p.deltaA, timestamp: p.timestamp }));
+    let min = null, max = null;
+    if (points.length) { min = points[0].grams; max = points[points.length - 1].grams; }
+    return { points, pointCount: points.length, r2: q.r2, degree: this.multiCal.degree,
+      range: points.length ? { min, max, span: max - min } : null,
+      recommendedPoints: 4, minimumStrongPoints: 3, lastReadiness: this._calibrationLastDiagnostics };
+  }
+
+  calibrate(knownGrams, options) {
+    options = options || {};
     if (!Number.isFinite(knownGrams) || knownGrams <= 0) knownGrams = 5.0;
     if (!this.baseline) {
       this.baseline = { x: this.filteredAccel.x, y: this.filteredAccel.y, z: this.filteredAccel.z };
     }
-    const MIN_SETTLED_SAMPLES = 40;
-    const MIN_CALIBRATION_SNR = 5;
+    const MIN_SETTLED_SAMPLES = 80;
+    const MIN_CALIBRATION_SNR = 6;
+    const readiness = this.getCalibrationReadiness(knownGrams);
+    if (!options.force && !readiness.ready) {
+      return { success: false, error: 'Calibration is not settled yet: ' + readiness.reasons.join(', '), readiness };
+    }
     // Calibrate from the settled AVERAGE of the loaded signal. _process() has
     // been feeding maDx/maDy every sample, so with the weight on, that window
     // already holds the best estimate. The old code reset it and refilled it
@@ -760,7 +822,7 @@ class SimpleScale {
     this.kalmanX.reset(); this.kalmanY.reset(); this.kalmanZ.reset();
     this.medX.reset(); this.medY.reset(); this.medZ.reset();
     this.weightKalman.reset();
-    this.maDx.reset(); this.maDy.reset(); this.stabilityCheck.reset(); this.emaWeight.reset();
+    this.maDx.reset(); this.maDy.reset(); this.stabilityCheck.reset(); this.emaWeight.reset(); this.displayEma.reset();
     this.displayWeight = 0; this.rawWeight = 0; this.lastDisplayValue = 0; this.stableCounter = 0;
     this._tare_in_progress = false;
     try { if (typeof localStorage !== 'undefined') localStorage.removeItem('phoneway_v4_calibration'); } catch (e) {}
