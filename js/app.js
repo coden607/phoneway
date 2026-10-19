@@ -1084,10 +1084,43 @@ class PhonewayApp {
     if (!Number.isFinite(grams) || grams <= 0) grams = 5.0;
     this.calWeightG = grams;
     this._hideCalModal();
-    // There is no separate rushed path anymore. QUICK CAL enters the exact same
-    // stability-gated workflow as CAL so a reference can never be accepted just
-    // because a fixed delay elapsed.
-    await this._startCalibration();
+
+    if (!this.powered) {
+      if (this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
+        const permitted = await this._requestPermissions();
+        this._awaitingMotionPermission = !permitted;
+      }
+      this.powered = true;
+      if (this.ledPower) this.ledPower.on('green');
+      this.scale.start();
+      this.backgroundFusion.start().catch(() => {});
+    }
+
+    this._setState("CALIBRATING");
+    this._showToast("Quick Cal: clear the phone — zeroing...", 3000);
+    await this.scale.tare();
+    this._showToast(`Now place the ${grams}g reference weight and leave it still. I’ll capture it automatically.`, 7000);
+
+    const started = Date.now();
+    const timeoutMs = 20000;
+    while (Date.now() - started < timeoutMs) {
+      const readiness = this.scale.getCalibrationReadiness(grams, { quick: true });
+      if (readiness.ready) {
+        const result = this.scale.calibrate(grams, { readiness });
+        if (result.success) {
+          this._setState("READY");
+          this._updateCalibrationGuide();
+          soundEffects.playPowerChime(true);
+          hapticFeedback([30, 50, 30]);
+          this._showToast(`Quick Cal saved ${grams}g. Remove the weight and tap TARE before weighing.`, 5000);
+          return;
+        }
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    this._setState("READY");
+    this._showToast("Quick Cal timed out — keep the phone still, then try again.", 5000);
   }
 
   _calibrateCurrentLoad() {
@@ -1351,8 +1384,7 @@ class PhonewayApp {
         soundEffects.playBeepStable();
         button.onclick = null;
         if (points < 4) {
-          this._showToast(`Point ${points}/4 saved in memory. Choose a different known weight for the next point.`, 5000);
-          this._showCalModal();
+          this._showToast(`Point ${points}/4 saved. Guided setup does one point at a time; start CAL again when ready for the next weight.`, 5500);
         } else {
           this._showToast("4-point calibration saved. Scale ready to weigh.", 4000);
         }
