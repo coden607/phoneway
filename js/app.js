@@ -520,23 +520,23 @@ class PhonewayApp {
         const rawTilt = Math.hypot(this.scale.maDx.mean, this.scale.maDy.mean);
         const deflection = this.scale.directionalProj.project(this.scale.maDx.mean, this.scale.maDy.mean);
         const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
-        const hasMinSamples = this._calFlowReadings.length >= 6;
-        const stillnessQuality = (this.scale.motionQuality != null) ? this.scale.motionQuality : 0.8;
-        const lowVariance = medianDeviation <= Math.max(1.8, stableReading * 0.4);
-        // An empty phone is also perfectly still, so "steady" alone fired the lock
-        // before any weight was placed. Require a real load: the tilt must stand
-        // clear of its own noise.
-        const hasLoad = this.scale.getLoadSnr() >= 6;
-        const isSteady = hasMinSamples && lowVariance && hasLoad && (!this.scale.motionBlocked || stillnessQuality >= 0.25);
+        const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
+        const hasMinSamples = readiness.sampleCount >= 80;
+        const lowVariance = medianDeviation <= Math.max(0.35, stableReading * 0.08);
+        const hasLoad = readiness.snr >= 6;
+        const isSteady = readiness.ready && lowVariance;
 
         if (isSteady) {
-          this._calFlowStableCount = Math.min(20, (this._calFlowStableCount || 0) + 1);
+          this._calFlowStableCount = Math.min(30, (this._calFlowStableCount || 0) + 1);
         } else {
           this._calFlowStableCount = Math.max(0, (this._calFlowStableCount || 0) - 1);
         }
 
-        const stableTarget = 8;
-        const autoLock = hasLoad && ((this._calFlowStableCount >= stableTarget) || (elapsed > 3000 && hasMinSamples));
+        // Deliberately conservative: calibration never auto-locks on a timer.
+        // It needs 80+ samples plus 2.5 seconds of continuously acceptable
+        // sensor stability. This prevents the old 1.2-3 second rush-through.
+        const stableTarget = 12;
+        const autoLock = isSteady && this._calFlowStableCount >= stableTarget;
 
         if (autoLock) {
           if (this._calStep2Interval) {
@@ -557,19 +557,12 @@ class PhonewayApp {
             body.textContent = "STEP 3\n\nSteady lock detected!\n\nTap CALIBRATE NOW to lock sensitivity to " + this.calWeightG + "g.";
           }
         } else if (button) {
-          if (elapsed > 1200) {
-            // Manual lock override enabled after 1.2s — user is never trapped
-            button.disabled = false;
-            button.textContent = "LOCK " + this.calWeightG + "g & CALIBRATE (TAP)";
-            if (status) {
-              status.textContent = "SETTLING (" + Math.min(stableTarget, this._calFlowStableCount) + "/" + stableTarget + ") · OR TAP TO LOCK";
-            }
-          } else {
-            button.disabled = true;
-            button.textContent = "HOLD STILL (" + Math.min(stableTarget, this._calFlowStableCount) + "/" + stableTarget + ")...";
-            if (status) {
-              status.textContent = "HOLD STILL · SETTLING...";
-            }
+          button.disabled = true;
+          const held = Math.min(2.5, (readiness.stableMs || 0) / 1000).toFixed(1);
+          button.textContent = "SETTLING " + held + "/2.5s · " + readiness.sampleCount + "/80";
+          if (status) {
+            const reason = readiness.reasons && readiness.reasons.length ? readiness.reasons[0].toUpperCase() : "HOLD STILL";
+            status.textContent = reason + " · DO NOT REMOVE WEIGHT";
           }
         }
         return;
@@ -1091,52 +1084,10 @@ class PhonewayApp {
     if (!Number.isFinite(grams) || grams <= 0) grams = 5.0;
     this.calWeightG = grams;
     this._hideCalModal();
-
-    if (!this.powered) {
-      if (this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
-        const permitted = await this._requestPermissions();
-        this._awaitingMotionPermission = !permitted;
-      }
-      this.powered = true;
-      if (this.ledPower) this.ledPower.on('green');
-      try {
-        this.scale.start();
-        this.backgroundFusion.start().catch(() => {});
-      } catch (e) {
-        console.error('Scale start error:', e);
-      }
-    }
-
-    soundEffects.playKeyClick();
-    hapticFeedback([30]);
-    this._setState("CALIBRATING");
-    this._showToast(`⚖️ Step 1/2: Zeroing baseline — Keep phone still...`, 3000);
-
-    // 1. Clean Zero Baseline
-    await this.scale.tare();
-    soundEffects.playBeepStable();
-    hapticFeedback([50]);
-
-    // 2. Prompt for Weight
-    this._showToast(`⚖️ Step 2/2: Place ${grams}g weight on weigh zone now...`, 4000);
-
-    // Settle for placement
-    await new Promise(r => setTimeout(r, 2200));
-
-    const result = this.scale.calibrate(grams);
-    if (result.success) {
-      soundEffects.playPowerChime(true);
-      hapticFeedback([30, 50, 40]);
-      this._setState("READY");
-      this._updateAccuracyDisplay(0.985);
-      this._updateCalibrationGuide();
-      const calBtn = document.getElementById('quickCalBtn');
-      if (calBtn) calBtn.classList.remove('pulse');
-      this._showToast(`🎉 Calibrated! Locked to ${grams}g (0.1g resolution active)`, 4500);
-    } else {
-      this._showToast(`Not calibrated: ${result.error || 'the weight moved the phone too little to measure'}`, 5000);
-      this._setState("READY");
-    }
+    // There is no separate rushed path anymore. QUICK CAL enters the exact same
+    // stability-gated workflow as CAL so a reference can never be accepted just
+    // because a fixed delay elapsed.
+    await this._startCalibration();
   }
 
   _calibrateCurrentLoad() {
@@ -1162,7 +1113,7 @@ class PhonewayApp {
       this._updateCalibrationGuide();
       const calBtn = document.getElementById('quickCalBtn');
       if (calBtn) calBtn.classList.remove('pulse');
-      this._showToast(`✅ Current load locked as ${grams}g! (0.1g resolution)`, 4000);
+      this._showToast(`✅ Current load locked as ${grams}g! (0.1g display resolution)`, 4000);
     } else {
       this._showToast(`Could not lock current load: ${result.error}`, 4000);
     }
@@ -1288,7 +1239,7 @@ class PhonewayApp {
           body: "CALIBRATION COMPLETE!\n\n👉 Remove the " + this.calWeightG + "g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.",
           status: "REMOVE WEIGHT · TAP DONE",
           progress: "100%",
-          button: "DONE"
+          button: this.scale.getCalibrationQuality().points < 4 ? "ADD ANOTHER POINT" : "DONE"
         }
       };
       const cfg = steps[step];
@@ -1339,25 +1290,18 @@ class PhonewayApp {
             this._calStep2Interval = null;
             return;
           }
-          const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
-          const stableTarget = 8;
-          const count = this._calFlowStableCount || 0;
-          if (elapsed > 1200) {
-            if (button) {
-              button.disabled = false;
-              button.textContent = `LOCK ${this.calWeightG}g & CALIBRATE (TAP)`;
-            }
-            if (status) {
-              status.textContent = `SETTLING (${Math.min(stableTarget, count)}/${stableTarget}) · OR TAP TO LOCK`;
-            }
-          } else {
-            if (button) {
-              button.disabled = true;
-              button.textContent = `HOLD STILL (${Math.min(stableTarget, count)}/${stableTarget})...`;
-            }
-            if (status) {
-              status.textContent = "HOLD STILL · SETTLING...";
-            }
+          const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
+          const held = Math.min(2.5, (readiness.stableMs || 0) / 1000).toFixed(1);
+          if (button) {
+            button.disabled = !readiness.ready;
+            button.textContent = readiness.ready
+              ? `READY · LOCK ${this.calWeightG}g`
+              : `SETTLING ${held}/2.5s · ${readiness.sampleCount}/80`;
+          }
+          if (status) {
+            status.textContent = readiness.ready
+              ? "STEADY · READY TO CAPTURE"
+              : ((readiness.reasons && readiness.reasons[0]) || "HOLD STILL").toUpperCase();
           }
         }, 100);
         return;
@@ -1394,18 +1338,24 @@ class PhonewayApp {
 
       if (this._calFlowStep === 4) {
         button.disabled = true;
-        status.textContent = "ZEROING...";
+        const points = this.scale.getCalibrationQuality().points;
+        status.textContent = "REMOVE WEIGHT · ZEROING...";
+        await this.scale.tare();
         overlay.classList.remove("show");
         overlay.style.display = "none";
         this._calFlowActive = false;
         this._calFlowStep = 0;
         this._pendingCalibration = false;
-        await this.scale.tare();
         this._setState("READY");
         if (this.display) this.display.setValue(0);
-        this._showToast("Calibrated to 0.1g! Scale ready to weigh.", 4000);
         soundEffects.playBeepStable();
         button.onclick = null;
+        if (points < 4) {
+          this._showToast(`Point ${points}/4 saved in memory. Choose a different known weight for the next point.`, 5000);
+          this._showCalModal();
+        } else {
+          this._showToast("4-point calibration saved. Scale ready to weigh.", 4000);
+        }
         return;
       }
     };
