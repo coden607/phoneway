@@ -5,7 +5,7 @@
  * see docs/legacy/DEAD-CODE-2026-10-08.md).
  */
 
-const CACHE = 'phoneway-v5.3.4';
+const CACHE = 'phoneway-v5.3.4-accuracy26';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
