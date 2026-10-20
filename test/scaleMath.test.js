@@ -147,14 +147,14 @@ describe('anytime recalibration & sensitivity adaptation', () => {
     scale.filteredAccel = { x: 0, y: 0.025, z: 9.8 };
 
     // Initial cal with 5g
-    const res1 = scale.calibrate(5.0);
+    const res1 = scale.calibrate(5.0, { force: true });
     expect(res1.success).toBe(true);
     expect(scale.calibrated).toBe(true);
     const sens1 = scale.sensitivity;
 
     // Simulate surface change (phone moved to softer mouse pad: 2x deflection for same 5g)
     scale.filteredAccel = { x: 0, y: 0.050, z: 9.8 };
-    const res2 = scale.calibrate(5.0);
+    const res2 = scale.calibrate(5.0, { force: true });
     expect(res2.success).toBe(true);
     // New sensitivity should immediately adapt to the new surface deflection
     const expectedSens = 5.0 / scale.directionalProj.project(0, 0.050);
@@ -168,7 +168,7 @@ describe('anytime recalibration & sensitivity adaptation', () => {
     scale.filteredAccel = { x: 0, y: 0.010, z: 9.8 };
 
     // Direct cal with 1.0g dollar bill
-    const resBill = scale.calibrate(1.0);
+    const resBill = scale.calibrate(1.0, { force: true });
     expect(resBill.success).toBe(true);
     expect(scale.displayWeight).toBe(1.0);
   });

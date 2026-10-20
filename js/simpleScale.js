@@ -469,7 +469,8 @@ class SimpleScale {
     }
   }
 
-  getCalibrationReadiness(knownGrams) {
+  getCalibrationReadiness(knownGrams, options) {
+    options = options || {};
     const grams = Number(knownGrams);
     const sampleCount = Math.min(this.maDx.length, this.maDy.length);
     const rawDelta = Math.hypot(this.maDx.mean, this.maDy.mean);
@@ -478,8 +479,11 @@ class SimpleScale {
       : Infinity;
     const snr = Number.isFinite(se) && se > 0 ? rawDelta / se : (rawDelta > 0 && se === 0 ? Infinity : 0);
     const stdDev = this.stabilityCheck.stdDev;
-    const enoughSamples = sampleCount >= 80;
-    const stableWindow = this.stabilityCheck.isFull && Number.isFinite(stdDev) && stdDev <= 0.065;
+    const minSamples = options.quick ? 45 : 80;
+    const requiredStableMs = options.quick ? 900 : 2500;
+    const enoughSamples = sampleCount >= minSamples;
+    const stableWindow = (options.quick ? this.stabilityCheck.length >= 45 : this.stabilityCheck.isFull) &&
+      Number.isFinite(stdDev) && stdDev <= (options.quick ? 0.085 : 0.065);
     const motionOk = !this.motionBlocked && this.motionQuality >= 0.35;
     const loadDetected = snr >= 6;
     const now = Date.now();
@@ -489,15 +493,15 @@ class SimpleScale {
       this._calibrationStableSince = 0;
     }
     const stableMs = this._calibrationStableSince ? now - this._calibrationStableSince : 0;
-    const settled = stableMs >= 2500;
+    const settled = stableMs >= requiredStableMs;
     const reasons = [];
     if (!enoughSamples) reasons.push('collecting sensor samples');
     if (!stableWindow) reasons.push('reading still bouncing');
     if (!motionOk) reasons.push('phone is moving');
     if (!loadDetected) reasons.push('reference load is too weak');
-    if (enoughSamples && stableWindow && motionOk && loadDetected && !settled) reasons.push('waiting for 2.5 s steady hold');
+    if (enoughSamples && stableWindow && motionOk && loadDetected && !settled) reasons.push(`waiting for ${requiredStableMs / 1000} s steady hold`);
     const result = { ready: enoughSamples && stableWindow && motionOk && loadDetected && settled,
-      sampleCount, snr, stdDev, stableMs, rawDelta, knownGrams: grams, reasons };
+      sampleCount, minSamples, requiredStableMs, snr, stdDev, stableMs, rawDelta, knownGrams: grams, reasons };
     this._calibrationLastDiagnostics = result;
     return result;
   }
@@ -520,7 +524,7 @@ class SimpleScale {
     }
     const MIN_SETTLED_SAMPLES = 80;
     const MIN_CALIBRATION_SNR = 6;
-    const readiness = this.getCalibrationReadiness(knownGrams);
+    const readiness = options.readiness || this.getCalibrationReadiness(knownGrams);
     if (!options.force && !readiness.ready) {
       return { success: false, error: 'Calibration is not settled yet: ' + readiness.reasons.join(', '), readiness };
     }

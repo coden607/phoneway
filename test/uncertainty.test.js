@@ -38,7 +38,7 @@ function calibratedScale({ sigma = 0.013, deflection = 0.05, seed = 11 } = {}) {
   s._tare_in_progress = true; s._tare_started_at = Date.now(); s._tare_warmup_count = 0; s._tare_xs = []; s._tare_ys = []; s._tare_zs = [];
   feed(120);
   dx = deflection; feed(400);
-  s.calibrate(5);
+  s.calibrate(5, { force: true });
   return { s, feed, setDx: (v) => { dx = v; }, advance: (ms) => { clock += ms; } };
 }
 

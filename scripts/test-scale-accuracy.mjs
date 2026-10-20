@@ -69,7 +69,7 @@ console.log('🧪 Testing PhoneWeigh 0.1g Precision Math...\n');
 // 3. Test SimpleScale Precision Measurement & Tier Classification
 {
   const scale = new SimpleScale();
-  assert.equal(scale.deadbandThreshold, 0.02);
+  assert.equal(scale.deadbandThreshold, 0.05, 'display hysteresis is half the 0.1g display step');
   assert.ok(scale.directionalProj !== undefined);
 
   // Simulate tare baseline
