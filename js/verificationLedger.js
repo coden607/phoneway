@@ -80,6 +80,7 @@ class VerificationLedger {
       timestamp: Number.isFinite(entry.timestamp) ? entry.timestamp : Date.now(),
       referenceWeight: entry.referenceWeight,
       measuredError: entry.measuredError,
+      referenceTolerance: Number.isFinite(entry.referenceTolerance) ? Math.max(0, entry.referenceTolerance) : 0,
       deviceModel: entry.deviceModel || this.deviceModel
     };
     this.entries.push(stored);
