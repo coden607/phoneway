@@ -1,0 +1,4 @@
+'use strict';
+function clusterVariance(values,size){const v=(values||[]).filter(Number.isFinite);if(size<1||v.length<size*2)return Infinity;const means=[];for(let i=0;i+size<=v.length;i+=size){const s=v.slice(i,i+size);means.push(s.reduce((a,b)=>a+b,0)/s.length)}if(means.length<2)return Infinity;let sum=0;for(let i=1;i<means.length;i++)sum+=(means[i]-means[i-1])**2;return sum/(2*(means.length-1));}
+function chooseAveragingWindow(values,candidates=[4,8,16,32,64]){let best={size:null,variance:Infinity};for(const size of candidates){const variance=clusterVariance(values,size);if(variance<best.variance)best={size,variance};}return best;}
+export{clusterVariance,chooseAveragingWindow};
