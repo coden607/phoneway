@@ -1,0 +1,4 @@
+'use strict';
+function weightedCenter(readings){let sw=0,s=0;for(const r of readings){const w=Math.max(0,Number(r.confidence)||0);sw+=w;s+=w*r.grams;}return sw?s/sw:null;}
+function gateConsensus(readings,{absolute=.3,relative=.08,min=2}={}){const v=(readings||[]).filter(r=>Number.isFinite(r.grams)&&(r.confidence??1)>0);if(v.length<min)return{ready:false,reason:'insufficient-estimators'};const center=weightedCenter(v);const tol=Math.max(absolute,Math.abs(center)*relative);const maxDeviation=Math.max(...v.map(r=>Math.abs(r.grams-center)));return{ready:maxDeviation<=tol,center,tolerance:tol,maxDeviation,reason:maxDeviation<=tol?'agree':'disagree'};}
+export{gateConsensus};
