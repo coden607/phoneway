@@ -32,3 +32,6 @@ These are the next measurement-integrity upgrades after the current 15-part evid
 - PWA changes: offline smoke and service-worker asset/version coherence.
 - Accuracy wording: verification-ledger/static-claim guard.
 - Physical performance: never infer from synthetic tests; device-of-record evidence is mandatory.
+
+
+PIV execution companion: `docs/PIV-MAX-ACCURACY.md`.
