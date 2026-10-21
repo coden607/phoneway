@@ -174,3 +174,13 @@ describe('anytime recalibration & sensitivity adaptation', () => {
   });
 });
 
+
+
+describe('calibration reference provenance', () => {
+  it('persists calibration reference provenance with a point', () => {
+    const cal = new MultiPointCalibration();
+    cal.addPoint(5, 0.05, { id:'cert_5g', label:'5 g calibration weight', tolerance:0.005, trust:'certified' });
+    expect(cal.points[0].reference.id).toBe('cert_5g');
+    expect(cal.points[0].reference.tolerance).toBe(0.005);
+  });
+});
