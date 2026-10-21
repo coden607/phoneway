@@ -1,6 +1,6 @@
 import { describe,it,expect } from 'vitest';
 import {
- rejectMadOutlier,calibrationCoverage,calibrationEvidence,noiseBudget,SampleRateMonitor,
+ rejectMadOutlier,StepPreservingHampel,calibrationCoverage,calibrationEvidence,noiseBudget,SampleRateMonitor,
  calibrationStaleness,referenceUncertainty,verificationDiversity,thermalQualification,
  repeatability,surfaceQualification,browserPreflight,dropoutRecovery,deviceContextFingerprint
 } from '../js/accuracyDiagnostics.js';
@@ -10,6 +10,15 @@ describe('accuracy enhancement diagnostics',()=>{
   const h=[1,1.01,.99,1.02,.98,1.01,1,.99,1.02];
   expect(rejectMadOutlier(9,h).rejected).toBe(true);
   expect(rejectMadOutlier(1.01,h).rejected).toBe(false);
+ });
+ it('preserves a sustained step after confirmation',()=>{
+  const f=new StepPreservingHampel({confirm:3});
+  for(let i=0;i<12;i++) f.update(0.02+(i%2)*0.001);
+  const a=f.update(5), b=f.update(5.01), d=f.update(4.99);
+  expect(a.rejected).toBe(true);
+  expect(b.rejected).toBe(true);
+  expect(d.step).toBe(true);
+  expect(d.value).toBeGreaterThan(4.9);
  });
  it('requires 3-point, high-quality, covered calibration evidence',()=>{
   const p=[{grams:1},{grams:5},{grams:20}];
