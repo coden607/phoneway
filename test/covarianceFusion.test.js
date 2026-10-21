@@ -1,3 +1,5 @@
 import{describe,it,expect}from'vitest';import{fuseTwo,disagreement}from'../js/covarianceFusion.js';
 describe('covariance-aware fusion',()=>{it('leans toward lower-variance estimator',()=>expect(fuseTwo(5,7,{varA:.01,varB:1,cov:0}).value).toBeLessThan(5.1));it('reports normalized disagreement',()=>expect(disagreement(5,7,.1,.1)).toBeGreaterThan(10));});
 // base-refresh: rerun against current main
+
+// base-refresh-2: rerun against advanced main
