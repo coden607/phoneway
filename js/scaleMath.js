@@ -118,10 +118,16 @@ class MultiPointCalibration {
     this.coeffs = null;
     this.degree = 1;
   }
-  addPoint(grams, deltaA) {
+  addPoint(grams, deltaA, reference = null) {
     if (deltaA < 1e-6 || grams < 0) return false;
     this.points = this.points.filter(p => Math.abs(p.grams - grams) > 0.5);
-    this.points.push({ grams, deltaA, timestamp: Date.now() });
+    const ref = reference && typeof reference === 'object' ? {
+      id: reference.id || null,
+      label: reference.label || reference.name || null,
+      tolerance: Number.isFinite(reference.tolerance) ? reference.tolerance : null,
+      trust: reference.trust || null
+    } : null;
+    this.points.push({ grams, deltaA, reference: ref, timestamp: Date.now() });
     this.points.sort((a, b) => a.grams - b.grams);
     if (this.points.length >= 4 && this.degree === 1) this.degree = 2;
     this._fit();
