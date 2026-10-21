@@ -1,2 +1,3 @@
 import{describe,it,expect}from'vitest';import{orientationTrust}from'../js/orientationInvalidation.js';
 describe('orientation invalidation',()=>{it('keeps small movement trusted',()=>expect(orientationTrust({beta:0,gamma:0},{beta:1,gamma:1}).trusted).toBe(true));it('invalidates large change',()=>expect(orientationTrust({beta:0,gamma:0},{beta:6,gamma:0}).state).toBe('invalidate'))});
+// base-refresh: rerun against current main
