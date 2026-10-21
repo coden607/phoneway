@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{RepeatedPlacementProtocol}from'../js/repeatedPlacement.js';
+describe('repeated placement protocol',()=>{it('requires independent cycles',()=>{const p=new RepeatedPlacementProtocol({required:3});p.add({placed:5,removed:0});p.add({placed:5.1,removed:.02});expect(p.summary(5).ready).toBe(false);p.add({placed:4.9,removed:.01});expect(p.summary(5).ready).toBe(true)});it('tracks zero return',()=>{const p=new RepeatedPlacementProtocol({required:1});p.add({placed:5,removed:.2});expect(p.summary(5).removedMax).toBe(.2)})});
