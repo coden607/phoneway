@@ -1,2 +1,3 @@
 import{describe,it,expect}from'vitest';import{summarizeErrors,buildDeviceEvidenceBundle}from'../js/deviceEvidenceBundle.js';
 describe('device-of-record evidence bundle',()=>{it('computes observed error metrics',()=>{const s=summarizeErrors([{known:5,measured:5.1},{known:10,measured:9.8}]);expect(s.mae).toBeCloseTo(.15);expect(s.maxAbs).toBeCloseTo(.2)});it('withholds release readiness without enough physical evidence',()=>{const b=buildDeviceEvidenceBundle({device:'phone',surface:'desk',softwareVersion:'x',verification:[{known:5,measured:5}],repeatability:{count:1}});expect(b.releaseReady).toBe(false);expect(b.claimPolicy).toBe('UNVERIFIED')})});
+// base-refresh: rerun against current main
