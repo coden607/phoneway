@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{medianOfMeans,capturePoint}from'../js/repeatedCapture.js';
+describe('repeated calibration captures',()=>{it('resists a single huge outlier',()=>expect(medianOfMeans([.01,.011,.009,.01,1],3)).toBeLessThan(.1));it('records capture count',()=>expect(capturePoint(5,[.1,.1,.1]).captures).toBe(3))});
