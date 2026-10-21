@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{looSummary}from'../js/leaveOneOutCalibration.js';
+describe('leave-one-out calibration validation',()=>{it('scores a consistent line tightly',()=>{const p=[1,2,5,10].map(g=>({grams:g,deltaA:g/100}));expect(looSummary(p).maxAbsError).toBeLessThan(.001)});it('exposes a bad point',()=>{const p=[{grams:1,deltaA:.01},{grams:2,deltaA:.02},{grams:5,deltaA:.05},{grams:10,deltaA:.15}];expect(looSummary(p).maxAbsError).toBeGreaterThan(2)})});
