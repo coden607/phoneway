@@ -24,6 +24,7 @@ const ASSETS = [
   BASE + 'js/cameraSensor.js',
   BASE + 'js/sensorCombinations.js',
   BASE + 'js/referenceWeights.js',
+  BASE + 'js/calibrationReferences.js',
   BASE + 'js/deviceCompat.js',
   BASE + 'js/verificationLedger.js',
   BASE + 'js/accuracyDiagnostics.js',
