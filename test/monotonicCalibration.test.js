@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{checkMonotonic}from'../js/monotonicCalibration.js';
+describe('monotonic calibration',()=>{it('accepts increasing estimator',()=>expect(checkMonotonic(x=>100*x,0,.1).ok).toBe(true));it('rejects nonmonotonic estimator',()=>expect(checkMonotonic(x=>x<.05?x:0,0,.1).ok).toBe(false))});
