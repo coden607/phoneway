@@ -89,6 +89,13 @@ jobs:
           }
           if (!(await page.locator('#app').evaluate(el=>el.classList.contains('photo-scale-ui')))) throw new Error('gold scale primary UI missing');
           await page.locator('#btnPower').click();
+          // First-run calibration/onboarding is expected to cover the scale UI.
+          // This smoke test validates the underlying controls, so dismiss only
+          // the test overlay deterministically instead of racing its timer.
+          await page.evaluate(() => {
+            const modal=document.getElementById('onboardModal');
+            if (modal) { modal.style.display='none'; modal.classList.remove('show'); }
+          });
           await page.locator('#btnTare').click();
           if (errors.length) throw new Error(errors.join('\n'));
           await browser.close();
