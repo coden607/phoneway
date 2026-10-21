@@ -1,0 +1,4 @@
+'use strict';
+function calibratedRange(points){const p=(points||[]).filter(x=>Number.isFinite(x.deltaA)&&Number.isFinite(x.grams));if(!p.length)return null;return{minDelta:Math.min(...p.map(x=>x.deltaA)),maxDelta:Math.max(...p.map(x=>x.deltaA)),minGrams:Math.min(...p.map(x=>x.grams)),maxGrams:Math.max(...p.map(x=>x.grams))};}
+function classifyDelta(delta,points,margin=.05){const r=calibratedRange(points);if(!r)return{state:'unverified',range:null};const span=Math.max(1e-9,r.maxDelta-r.minDelta),pad=span*margin;const state=delta<r.minDelta-pad?'below-range':delta>r.maxDelta+pad?'above-range':'in-range';return{state,range:r,trusted:state==='in-range'};}
+export{calibratedRange,classifyDelta};
