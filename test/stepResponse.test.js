@@ -1,0 +1,3 @@
+import{describe,it,expect}from'vitest';import{StepResponseDetector}from'../js/stepResponse.js';
+describe('step response detector',()=>{it('ignores one spike',()=>{const d=new StepResponseDetector();d.update(0);expect(d.update(5).step).toBe(false);expect(d.update(0).step).toBe(false)});it('accepts sustained load',()=>{const d=new StepResponseDetector({confirm:3});d.update(0);d.update(5);d.update(5.1);expect(d.update(4.9).step).toBe(true)})});
+// base-refresh: rerun against current main
