@@ -17,6 +17,36 @@ function mad(values) {
   return median(values.map(v=>Math.abs(v-m)));
 }
 
+class StepPreservingHampel {
+  constructor({window=21,z=6,confirm=3}={}) {
+    this.window=window; this.z=z; this.confirm=confirm; this.history=[]; this.pending=[];
+  }
+  update(value) {
+    if (!Number.isFinite(value)) return { value, rejected:false, step:false };
+    if (this.history.length < 9) {
+      this._push(value); return { value, rejected:false, step:false };
+    }
+    const m=median(this.history), d=mad(this.history), sigma=Math.max(1e-9,d*1.4826);
+    const isOutlier=Math.abs(value-m)>this.z*sigma;
+    if (!isOutlier) {
+      this.pending=[]; this._push(value); return { value, rejected:false, step:false };
+    }
+    const dir=Math.sign(value-m);
+    if (!this.pending.length || Math.sign(this.pending[0]-m)===dir) this.pending.push(value);
+    else this.pending=[value];
+    if (this.pending.length >= this.confirm) {
+      const accepted=median(this.pending);
+      this.pending=[];
+      this.history=[];
+      this._push(accepted);
+      return { value, rejected:false, step:true };
+    }
+    return { value:m, rejected:true, step:false };
+  }
+  _push(v){ this.history.push(v); if(this.history.length>this.window)this.history.shift(); }
+  reset(){ this.history=[]; this.pending=[]; }
+}
+
 function rejectMadOutlier(value, history, z=6) {
   if (!history || history.length < 9) return { value, rejected:false };
   const m = median(history);
@@ -117,7 +147,7 @@ function deviceContextFingerprint(text) {
 }
 
 export {
-  median,mad,rejectMadOutlier,calibrationCoverage,calibrationEvidence,noiseBudget,
+  median,mad,rejectMadOutlier,StepPreservingHampel,calibrationCoverage,calibrationEvidence,noiseBudget,
   SampleRateMonitor,calibrationStaleness,referenceUncertainty,verificationDiversity,
   thermalQualification,repeatability,surfaceQualification,browserPreflight,
   dropoutRecovery,deviceContextFingerprint
