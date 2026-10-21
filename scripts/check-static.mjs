@@ -95,6 +95,24 @@ else {
   else ok(`index.html ?v= refs all = ${version}`);
 }
 
+/* ── 5. accuracy-claim guard ─────────────────────────────── */
+console.log('accuracy claim guard');
+let claimViolations = 0;
+for (const file of jsFiles) {
+  if (file === 'verificationLedger.js') continue;
+  const src = read('js/' + file);
+  // Public numeric ± claims must be produced by VerificationLedger, never
+  // hard-coded into UI assignment paths.
+  const suspicious = [
+    ...src.matchAll(/(?:textContent|innerHTML|estimatedAccuracy|accuracy)\s*=\s*['"`]([^'"`]*±\s*\d+(?:\.\d+)?\s*g)/g)
+  ];
+  if (suspicious.length) {
+    claimViolations += suspicious.length;
+    fail(`js/${file}: hard-coded numeric accuracy claim outside verification ledger`);
+  }
+}
+if (!claimViolations) ok('no hard-coded public numeric accuracy claims');
+
 /* ── verdict ──────────────────────────────────────────────── */
 if (failures) {
   console.error(`\nSTATIC CHECK FAILED — ${failures} problem(s)`);

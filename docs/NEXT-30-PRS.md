@@ -38,3 +38,8 @@ Ordered by ContinuityOS: measurement integrity first, then browser reliability, 
 ## Execution rule
 
 Each PR must be independently reviewable and green on the applicable gates. Core measurement changes require focused unit tests plus `npm run ci`; browser-facing changes also require the browser E2E job. Production deploy and merge remain separate approval boundaries.
+
+
+## Implementation checkpoint
+
+PR #12 implements items 4–20 where applicable as evidence/diagnostic gates. Items 21–30 remain follow-on work and still require their own validation before any physical accuracy claim.

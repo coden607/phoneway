@@ -2,6 +2,12 @@
 
 import { TiltCorrector } from './sensorCombinations.js';
 import { VerificationLedger } from './verificationLedger.js';
+import {
+  StepPreservingHampel, calibrationCoverage, calibrationEvidence, noiseBudget,
+  SampleRateMonitor, calibrationStaleness, referenceUncertainty, verificationDiversity,
+  thermalQualification, repeatability, surfaceQualification, browserPreflight,
+  dropoutRecovery, deviceContextFingerprint
+} from './accuracyDiagnostics.js';
 class SensorComboFusion {
   constructor(){ this.channels={}; }
   mark(n,v,w){ this.channels[n]={value:v,weight:w,last:Date.now()}; }
@@ -109,6 +115,12 @@ class SimpleScale {
     this._tare_zs = [];
     this._tare_resolve = null;
     this.sampleRate = 60;
+    this.sampleRateMonitor = new SampleRateMonitor();
+    this._robustGramFilter = new StepPreservingHampel({ window: 21, z: 6, confirm: 3 });
+    this._madRejected = 0;
+    this._repeatabilityReadings = [];
+    this._thermalEvidence = [];
+    this.calibrationSavedAt = 0;
     this.verificationHistory = [];
     // Honesty engine: the ONLY source of "±Xg" accuracy claims (see
     // js/verificationLedger.js). Each verifyAgainstKnown() appends one
@@ -164,6 +176,7 @@ class SimpleScale {
     const nowMs = Date.now();
     if (this._lastMotionAt && nowMs - this._lastMotionAt > SENSOR_GAP_MS) this._onSensorGap();
     this._lastMotionAt = nowMs;
+    this.sampleRateMonitor.add(nowMs);
     let x = accel.x != null ? accel.x : 0;
     let y = accel.y != null ? accel.y : 0;
     let z = accel.z != null ? accel.z : 0;
@@ -256,6 +269,9 @@ class SimpleScale {
       ? this.multiCal.estimate(deltaSignal)
       : deltaSignal * this.sensitivity;
     rawG = Math.max(0, this.tempComp.compensate(Math.max(0, rawG)));
+    const robust = this._robustGramFilter.update(rawG);
+    if (robust.rejected) this._madRejected++;
+    rawG = robust.value;
     rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
     if (rawG < 0.02) rawG = 0;
     this.rawWeight = rawG;
@@ -511,8 +527,12 @@ class SimpleScale {
     const points = this.multiCal.points.map(p => ({ grams: p.grams, deltaA: p.deltaA, timestamp: p.timestamp }));
     let min = null, max = null;
     if (points.length) { min = points[0].grams; max = points[points.length - 1].grams; }
+    const coverage = calibrationCoverage(points);
+    const evidence = calibrationEvidence(points, q.r2);
+    const stale = calibrationStaleness(this.calibrationSavedAt);
     return { points, pointCount: points.length, r2: q.r2, degree: this.multiCal.degree,
       range: points.length ? { min, max, span: max - min } : null,
+      coverage, evidence, stale,
       recommendedPoints: 4, minimumStrongPoints: 3, lastReadiness: this._calibrationLastDiagnostics };
   }
 
@@ -641,7 +661,8 @@ class SimpleScale {
     this.ledger.record({
       timestamp: result.timestamp,
       referenceWeight: knownGrams,
-      measuredError: errorGrams
+      measuredError: errorGrams,
+      referenceTolerance: tolerance
     });
     this._saveCalibration();
     return result;
@@ -693,6 +714,47 @@ class SimpleScale {
       meanError: meanError, stdDev: 0, maxError: s.maxAbsError,
       accuracy: this.verificationHistory.length ? this.verificationHistory[this.verificationHistory.length - 1].accuracy : null
     };
+  }
+
+  getAccuracyUpgradeReport() {
+    const uncertainty = this.getMeasuredUncertainty();
+    const cal = this.getCalibrationDiagnostics();
+    const recent = this.ledger.recent(10);
+    const lastTolerance = recent.length ? Number(recent[recent.length - 1].referenceTolerance) || 0 : 0;
+    const nb = uncertainty && uncertainty.grams != null
+      ? noiseBudget({ noiseGrams: uncertainty.noiseGrams, driftGrams: uncertainty.driftGrams, referenceTolerance: lastTolerance })
+      : null;
+    const repeat = repeatability(this._repeatabilityReadings);
+    const thermal = thermalQualification(this._thermalEvidence);
+    const surface = uncertainty ? surfaceQualification(uncertainty) : { qualified:false, score:0, reason:'collecting' };
+    let ua = 'unknown';
+    try { if (typeof navigator !== 'undefined' && navigator.userAgent) ua = navigator.userAgent; } catch (e) {}
+    return {
+      calibration: cal,
+      noiseBudget: nb,
+      sampleRate: this.sampleRateMonitor.stats(),
+      verificationDiversity: verificationDiversity(recent),
+      repeatability: repeat,
+      thermal,
+      surface,
+      browser: browserPreflight(),
+      dropout: dropoutRecovery(this._lastMotionAt),
+      deviceContext: deviceContextFingerprint(ua),
+      madRejected: this._madRejected,
+      referenceUncertainty: recent.length ? referenceUncertainty(recent[recent.length - 1].measuredError, lastTolerance) : null
+    };
+  }
+
+  recordRepeatabilityReading(grams) {
+    if (!Number.isFinite(grams)) return;
+    this._repeatabilityReadings.push(grams);
+    if (this._repeatabilityReadings.length > 12) this._repeatabilityReadings.shift();
+  }
+
+  recordThermalEvidence(temp, error) {
+    if (!Number.isFinite(temp) || !Number.isFinite(error)) return;
+    this._thermalEvidence.push({ temp, error });
+    if (this._thermalEvidence.length > 30) this._thermalEvidence.shift();
   }
 
   /** Public accuracy claim — a pure function of the verification ledger. */
@@ -784,6 +846,7 @@ class SimpleScale {
         multiCal: { points: this.multiCal.points, degree: this.multiCal.degree },
         verificationHistory: this.verificationHistory, timestamp: Date.now()
       };
+      this.calibrationSavedAt = cal.timestamp;
       if (typeof localStorage !== 'undefined') localStorage.setItem('phoneway_v4_calibration', JSON.stringify(cal));
       window._phonewayCal = cal;
     } catch (e) {}
@@ -796,8 +859,9 @@ class SimpleScale {
       if (!saved) return false;
       const cal = JSON.parse(saved);
       if (!cal.sensitivity) return false;
+      this.calibrationSavedAt = cal.timestamp || 0;
       this.calibrationAgeMs = cal.timestamp ? Math.max(0, Date.now() - cal.timestamp) : 0;
-      this.calibrationStale = this.calibrationAgeMs > 30 * 24 * 60 * 60 * 1000;
+      this.calibrationStale = calibrationStaleness(this.calibrationSavedAt).stale;
       this.sensitivity = cal.sensitivity;
       // Stale accelerometer baselines must never be restored across reloads.
       // Every session requires a live zero baseline captured when placed on surface.
@@ -827,6 +891,7 @@ class SimpleScale {
     this.medX.reset(); this.medY.reset(); this.medZ.reset();
     this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset(); this.stabilityCheck.reset(); this.emaWeight.reset(); this.displayEma.reset();
+    this.sampleRateMonitor.reset(); this._robustGramFilter.reset(); this._madRejected = 0;
     this.displayWeight = 0; this.rawWeight = 0; this.lastDisplayValue = 0; this.stableCounter = 0;
     this._tare_in_progress = false;
     try { if (typeof localStorage !== 'undefined') localStorage.removeItem('phoneway_v4_calibration'); } catch (e) {}

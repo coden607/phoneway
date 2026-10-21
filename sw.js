@@ -26,6 +26,7 @@ const ASSETS = [
   BASE + 'js/referenceWeights.js',
   BASE + 'js/deviceCompat.js',
   BASE + 'js/verificationLedger.js',
+  BASE + 'js/accuracyDiagnostics.js',
   BASE + 'js/telemetry.js',
   BASE + 'js/scaleMath.js',
   BASE + 'js/simpleScale.js',
