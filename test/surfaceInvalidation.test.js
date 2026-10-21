@@ -1,2 +1,3 @@
 import{describe,it,expect}from'vitest';import{surfaceFingerprint,compareSurface}from'../js/surfaceInvalidation.js';
 describe('surface fingerprint',()=>{it('keeps similar surface trusted',()=>{const a=surfaceFingerprint({noiseGrams:.1,driftGramsPerSec:.01,sensitivity:100}),b=surfaceFingerprint({noiseGrams:.11,driftGramsPerSec:.011,sensitivity:105});expect(compareSurface(a,b).trusted).toBe(true)});it('invalidates large change',()=>{const a=surfaceFingerprint({noiseGrams:.1,driftGramsPerSec:.01,sensitivity:100}),b=surfaceFingerprint({noiseGrams:.5,driftGramsPerSec:.1,sensitivity:50});expect(compareSurface(a,b).trusted).toBe(false)})});
+// base-refresh: rerun against current main
