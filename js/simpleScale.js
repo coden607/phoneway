@@ -533,7 +533,7 @@ class SimpleScale {
     return { points, pointCount: points.length, r2: q.r2, degree: this.multiCal.degree,
       range: points.length ? { min, max, span: max - min } : null,
       coverage, evidence, stale,
-      recommendedPoints: 4, minimumStrongPoints: 3, lastReadiness: this._calibrationLastDiagnostics };
+      recommendedPoints: 5, minimumStrongPoints: 3, lastReadiness: this._calibrationLastDiagnostics };
   }
 
   calibrate(knownGrams, options) {
@@ -603,7 +603,7 @@ class SimpleScale {
       deltaA = 0.001; // Resilient fallback deflection
     }
 
-    if (!this.multiCal.addPoint(knownGrams, deltaA)) {
+    if (!this.multiCal.addPoint(knownGrams, deltaA, options.reference || null)) {
       this.multiCal.clear();
       this.multiCal.addPoint(knownGrams, deltaA);
     }

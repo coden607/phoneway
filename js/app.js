@@ -41,6 +41,7 @@ import {
 } from './scaleMath.js';
 import { soundEffects } from './soundEffects.js';
 import { VibrationResonanceChannel, SETTLE_MS, SAMPLE_WINDOW_MS } from './channels/vibration-resonance.js';
+import { CERTIFIED_5_POINT, HOUSEHOLD_5_POINT } from './calibrationReferences.js';
 
 const UNITS = UNITS_CONFIG;
 
@@ -87,6 +88,8 @@ class PhonewayApp {
     this.unitIdx = 0;
     this.currentG = 0;
     this.calWeightG = 5.0;
+    this.calReference = null;
+    this.calibrationTargetPoints = 5;
     this._pendingCalibration = false;
     this._holdActive = false;
     this._selectedRefWeight = null;
@@ -1158,23 +1161,30 @@ class PhonewayApp {
     
     container.innerHTML = '';
     
-    const recommended = getRecommendedWeights();
-    
+    const certified = CERTIFIED_5_POINT.map(w => ({...w, icon:'⚖️', name:w.label}));
+    const household = HOUSEHOLD_5_POINT.map(w => ({...w, icon:w.id.includes('bill') ? '💵' : '🪙', name:w.label}));
+    const recommended = [...certified, ...household];
+
     recommended.forEach((w, idx) => {
       const item = document.createElement('div');
-      item.className = 'cal-item' + (idx === 0 ? ' selected' : '');
+      item.className = 'cal-item' + (idx === 2 ? ' selected' : '');
       item.innerHTML = `
         <div class="cal-icon">${w.icon}</div>
         <div class="cal-info">
           <strong>${w.name}</strong>
-          <small>${w.grams} g ±${w.tolerance}g</small>
+          <small>${w.grams} g · ±${w.tolerance}g reference · ${w.trust}</small>
         </div>
       `;
       item.addEventListener('click', () => {
         container.querySelectorAll('.cal-item').forEach(e => e.classList.remove('selected'));
         item.classList.add('selected');
         this.calWeightG = w.grams;
+        this.calReference = w;
       });
+      if (idx === 2) {
+        this.calWeightG = w.grams;
+        this.calReference = w;
+      }
       container.appendChild(item);
     });
   }
@@ -1272,7 +1282,7 @@ class PhonewayApp {
           body: "CALIBRATION COMPLETE!\n\n👉 Remove the " + this.calWeightG + "g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.",
           status: "REMOVE WEIGHT · TAP DONE",
           progress: "100%",
-          button: this.scale.getCalibrationQuality().points < 4 ? "ADD ANOTHER POINT" : "DONE"
+          button: this.scale.getCalibrationQuality().points < this.calibrationTargetPoints ? "ADD ANOTHER POINT" : "DONE"
         }
       };
       const cfg = steps[step];
@@ -1348,7 +1358,7 @@ class PhonewayApp {
         button.disabled = true;
         status.textContent = "CALIBRATING...";
         body.textContent = "Locking sensitivity for " + this.calWeightG + "g. Keep phone still...";
-        const res = this.scale.calibrate(this.calWeightG);
+        const res = this.scale.calibrate(this.calWeightG, { reference: this.calReference });
         if (res.success) {
           soundEffects.playPowerChime(true);
           hapticFeedback([30, 50, 30]);
@@ -1383,10 +1393,10 @@ class PhonewayApp {
         if (this.display) this.display.setValue(0);
         soundEffects.playBeepStable();
         button.onclick = null;
-        if (points < 4) {
-          this._showToast(`Point ${points}/4 saved. Guided setup does one point at a time; start CAL again when ready for the next weight.`, 5500);
+        if (points < this.calibrationTargetPoints) {
+          this._showToast(`Point ${points}/${this.calibrationTargetPoints} saved. Guided setup does one point at a time; start CAL again for the next known weight.`, 5500);
         } else {
-          this._showToast("4-point calibration saved. Scale ready to weigh.", 4000);
+          this._showToast("5-point calibration saved. Run VERIFY with held-out known weights before trusting an accuracy claim.", 5000);
         }
         return;
       }
