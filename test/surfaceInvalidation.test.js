@@ -3,3 +3,5 @@ describe('surface fingerprint',()=>{it('keeps similar surface trusted',()=>{cons
 // base-refresh: rerun against current main
 
 // base-refresh-2: rerun against advanced main
+
+// base-refresh-3: validate with deterministic E2E workflow
