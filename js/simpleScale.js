@@ -3,7 +3,7 @@
 import { TiltCorrector } from './sensorCombinations.js';
 import { VerificationLedger } from './verificationLedger.js';
 import {
-  rejectMadOutlier, calibrationCoverage, calibrationEvidence, noiseBudget,
+  StepPreservingHampel, calibrationCoverage, calibrationEvidence, noiseBudget,
   SampleRateMonitor, calibrationStaleness, referenceUncertainty, verificationDiversity,
   thermalQualification, repeatability, surfaceQualification, browserPreflight,
   dropoutRecovery, deviceContextFingerprint
@@ -116,7 +116,7 @@ class SimpleScale {
     this._tare_resolve = null;
     this.sampleRate = 60;
     this.sampleRateMonitor = new SampleRateMonitor();
-    this._rawGramHistory = [];
+    this._robustGramFilter = new StepPreservingHampel({ window: 21, z: 6, confirm: 3 });
     this._madRejected = 0;
     this._repeatabilityReadings = [];
     this._thermalEvidence = [];
@@ -269,11 +269,9 @@ class SimpleScale {
       ? this.multiCal.estimate(deltaSignal)
       : deltaSignal * this.sensitivity;
     rawG = Math.max(0, this.tempComp.compensate(Math.max(0, rawG)));
-    const robust = rejectMadOutlier(rawG, this._rawGramHistory, 6);
+    const robust = this._robustGramFilter.update(rawG);
     if (robust.rejected) this._madRejected++;
     rawG = robust.value;
-    this._rawGramHistory.push(rawG);
-    if (this._rawGramHistory.length > 31) this._rawGramHistory.shift();
     rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
     if (rawG < 0.02) rawG = 0;
     this.rawWeight = rawG;
@@ -893,7 +891,7 @@ class SimpleScale {
     this.medX.reset(); this.medY.reset(); this.medZ.reset();
     this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset(); this.stabilityCheck.reset(); this.emaWeight.reset(); this.displayEma.reset();
-    this.sampleRateMonitor.reset(); this._rawGramHistory = []; this._madRejected = 0;
+    this.sampleRateMonitor.reset(); this._robustGramFilter.reset(); this._madRejected = 0;
     this.displayWeight = 0; this.rawWeight = 0; this.lastDisplayValue = 0; this.stableCounter = 0;
     this._tare_in_progress = false;
     try { if (typeof localStorage !== 'undefined') localStorage.removeItem('phoneway_v4_calibration'); } catch (e) {}
