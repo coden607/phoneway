@@ -31,18 +31,21 @@ class SageHusaKalmanFilter:
         R: float = 0.05,
         Q: float = 0.005,
         P0: float = 1.0,
-        epsilon: float = 0.05
+        epsilon: float = 0.05,
+        R_max: float = 4.0
     ):
         """
         :param R: Initial measurement noise covariance.
         :param Q: Process noise covariance (random walk model).
         :param P0: Initial estimation error covariance.
         :param epsilon: Forgetting factor for Sage-Husa R adaptation (0.01 - 0.1).
+        :param R_max: Maximum physical noise covariance ceiling to prevent filter state freeze.
         """
         self.R = R
         self.Q = Q
         self.P = P0
         self.epsilon = epsilon
+        self.R_max = R_max
         self.x: Optional[float] = None
         self.initialized = False
 
@@ -64,7 +67,7 @@ class SageHusaKalmanFilter:
         # Sage-Husa adaptive R update
         S = P_prior + self.R
         self.R = (1.0 - self.epsilon) * self.R + self.epsilon * (innovation * innovation - S + self.R)
-        self.R = max(1e-6, self.R)
+        self.R = max(1e-6, min(self.R_max, self.R))
 
         # Kalman gain calculation
         K = P_prior / (P_prior + self.R)
@@ -133,13 +136,15 @@ class PhoneScale:
     def detect_settling(
         self,
         samples: List[float],
-        window_size: int = 5
+        window_size: int = 5,
+        raw_samples: Optional[List[float]] = None
     ) -> Tuple[bool, float, int]:
         """
         Detect whether the scale has reached mechanical equilibrium (settled).
         
         :param samples: Sequence of mass readings over time.
         :param window_size: Number of trailing samples to analyze for settling.
+        :param raw_samples: Optional raw un-filtered mass readings to verify physical equilibrium.
         :return: (is_stable, trailing_variance, settled_count)
         """
         if not samples or len(samples) < 4:
@@ -151,6 +156,14 @@ class PhoneScale:
         max_allowed_var = self.stabilization_tolerance ** 2
 
         is_stable = var <= max_allowed_var
+
+        # Defense-in-depth: Verify that raw input variance does not exceed physical stability threshold
+        if raw_samples is not None and len(raw_samples) >= 4:
+            raw_trailing = raw_samples[-w:]
+            raw_var = self.calculate_variance(raw_trailing)
+            max_raw_var = (self.stabilization_tolerance * 3.0) ** 2
+            if raw_var > max_raw_var:
+                is_stable = False
 
         # Count consecutive settled readings backwards from the end
         settled_count = 0
@@ -263,18 +276,23 @@ class PhoneScale:
                 roll_deg = float(tilt_cfg["roll_deg"])
 
         # Convert raw readings to deflection and grams, applying tilt compensation
-        kalman = SageHusaKalmanFilter(R=max(0.01, noise_floor_variance), Q=0.005)
+        kalman = SageHusaKalmanFilter(R=max(0.01, noise_floor_variance), Q=0.005, R_max=4.0)
         filtered_masses: List[float] = []
+        raw_masses: List[float] = []
 
         for r in readings:
             r_comp = PhoneScaleCalibrator.compensate_tilt(r, pitch_deg, roll_deg)
             deflection = r_comp - tare_baseline
             raw_grams = deflection / sensitivity
+            raw_masses.append(raw_grams)
             filtered_val = kalman.update(raw_grams)
             filtered_masses.append(filtered_val)
 
         # Detect settling and stabilization
-        is_stable, rolling_var, settled_count = self.detect_settling(filtered_masses)
+        is_stable, rolling_var, settled_count = self.detect_settling(
+            filtered_masses,
+            raw_samples=raw_masses
+        )
 
         # Final filtered mass
         final_mass = filtered_masses[-1]

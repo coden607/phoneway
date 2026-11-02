@@ -53,6 +53,8 @@ jobs:
       - run: npm audit --audit-level=high --omit=dev
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .gitleaks.toml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
