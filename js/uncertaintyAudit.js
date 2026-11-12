@@ -1,0 +1,4 @@
+'use strict';
+function auditUncertainty(records){const r=(records||[]).filter(x=>Number.isFinite(x.predicted)&&Number.isFinite(x.error)&&x.predicted>=0);if(!r.length)return{count:0,coverage:null,ratio:null,underconfident:null};const covered=r.filter(x=>Math.abs(x.error)<=x.predicted).length,obs=r.reduce((a,x)=>a+Math.abs(x.error),0)/r.length,pred=r.reduce((a,x)=>a+x.predicted,0)/r.length;return{count:r.length,coverage:covered/r.length,ratio:pred>0?obs/pred:Infinity,underconfident:pred>obs};}
+function uncertaintyScale(records,targetCoverage=.9){const r=(records||[]).filter(x=>Number.isFinite(x.predicted)&&x.predicted>0&&Number.isFinite(x.error));if(!r.length)return 1;const ratios=r.map(x=>Math.abs(x.error)/x.predicted).sort((a,b)=>a-b);const idx=Math.min(ratios.length-1,Math.ceil(targetCoverage*ratios.length)-1);return Math.max(1,ratios[idx]);}
+export{auditUncertainty,uncertaintyScale};
