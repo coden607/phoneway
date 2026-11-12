@@ -39,7 +39,7 @@ function session({ sigma, deflection, seed = 7 }) {
   feed(30);
   s._tare_in_progress = true; s._tare_started_at = Date.now();
   s._tare_warmup_count = 0; s._tare_xs = []; s._tare_ys = []; s._tare_zs = [];
-  feed(120);
+  feed(200); // 40 warmup + 150 tare samples
   dx = deflection; feed(200);
   const cal = s.calibrate(5, { force: true });
   const out = { cal, scale: s };

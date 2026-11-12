@@ -61,7 +61,7 @@ class SimpleScale {
     this.calibrationStale = false;
     this.calibrationAgeMs = 0;
     this.baseline = null;
-    this.sensitivity = 150;
+    this.sensitivity = 180; // starting estimate; refined by multi-point calibration
     this.directionalProj = new DirectionalProjection(0.0003);
     // Measured-uncertainty inputs (see getMeasuredUncertainty).
     this._driftBins = [];          // 1 s bins of the tilt vector, to measure creep
@@ -98,15 +98,15 @@ class SimpleScale {
     this.emaWeight = new EMA(0.045);
     this.displayEma = new EMA(0.12);
     this.stabilityCheck = new MovingAverage(90);
-    this.deadbandThreshold = 0.05; // display hysteresis: suppress visible jitter smaller than half a display step
+    this.deadbandThreshold = 0.03; // tighter noise floor for better low-weight accuracy
     this.displaySlewPerSample = 0.08; // cap transient display jumps while still tracking real load changes
     this._calibrationStableSince = 0;
     this._calibrationLastDiagnostics = null;
     this.lastDisplayValue = 0;
     this.stableCounter = 0;
     this._tare_in_progress = false;
-    this._tare_target = 60;
-    this._tare_warmup = 10;
+    this._tare_target = 150; // more samples for lower baseline variance
+    this._tare_warmup = 40; // longer warmup so Kalman fully settles
     this._tare_warmup_count = 0;
     this._tare_blocked_count = 0;
     this._tare_started_at = 0;
@@ -273,7 +273,7 @@ class SimpleScale {
     if (robust.rejected) this._madRejected++;
     rawG = robust.value;
     rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
-    if (rawG < 0.02) rawG = 0;
+    if (rawG < this.deadbandThreshold) rawG = 0;
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
     const stdDev = this.stabilityCheck.stdDev;
@@ -608,7 +608,9 @@ class SimpleScale {
       this.multiCal.addPoint(knownGrams, deltaA);
     }
     const newSensitivity = knownGrams / deltaA;
-    this.sensitivity = newSensitivity;
+    // First point: take it fully. Subsequent points: weighted average that trusts newer data more.
+    const blend = this.multiCal.points.length <= 1 ? 1.0 : 0.6;
+    this.sensitivity = blend * newSensitivity + (1 - blend) * this.sensitivity;
     this.calibrated = true;
     this.emaWeight.reset();
     this.stabilityCheck.reset();
@@ -884,7 +886,7 @@ class SimpleScale {
   }
 
   reset() {
-    this.baseline = null; this.calibrated = false; this.sensitivity = 150;
+    this.baseline = null; this.calibrated = false; this.sensitivity = 180; // starting estimate; refined by multi-point calibration
     this.directionalProj.reset();
     this.multiCal.clear(); this.verificationHistory = [];
     this.kalmanX.reset(); this.kalmanY.reset(); this.kalmanZ.reset();
