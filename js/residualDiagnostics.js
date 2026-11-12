@@ -1,0 +1,3 @@
+'use strict';
+function residualDiagnostics(points,estimate){const rows=(points||[]).filter(p=>Number.isFinite(p.grams)&&Number.isFinite(p.deltaA)).map(p=>{const predicted=estimate(p.deltaA);const residual=predicted-p.grams;return{grams:p.grams,predicted,residual,absError:Math.abs(residual)}});if(!rows.length)return{rows:[],bias:null,mae:null,rmse:null,maxAbs:null};const bias=rows.reduce((a,r)=>a+r.residual,0)/rows.length,mae=rows.reduce((a,r)=>a+r.absError,0)/rows.length,rmse=Math.sqrt(rows.reduce((a,r)=>a+r.residual*r.residual,0)/rows.length),maxAbs=Math.max(...rows.map(r=>r.absError));return{rows,bias,mae,rmse,maxAbs};}
+export{residualDiagnostics};
