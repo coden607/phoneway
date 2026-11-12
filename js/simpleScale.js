@@ -273,7 +273,8 @@ class SimpleScale {
     if (robust.rejected) this._madRejected++;
     rawG = robust.value;
     rawG = Math.max(0, this.weightKalman.update(rawG, 1 - this.motionQuality));
-    if (rawG < this.deadbandThreshold) rawG = 0;
+    // Raw gram floor is independent of display hysteresis (deadbandThreshold).
+    if (rawG < 0.02) rawG = 0;
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
     const stdDev = this.stabilityCheck.stdDev;
@@ -579,15 +580,13 @@ class SimpleScale {
       // Relative error of the sensitivity is about 1/SNR, so a calibration at
       // SNR 5 is already +/-20% (1 g on a 5 g coin). Measured over 40 noise
       // seeds: SNR ~50 gives <=0.1 g, ~10 gives ~0.2-0.5 g, <=3 gives 1-3 g.
-      // Accepted calibrations still report that confidence to the user.
+      // Do not hard-refuse weak real-phone deflections (~0.0002-0.001). A hard
+      // cutoff at 0.001 left the scale uncalibrated (sensitivity 180) so a 5 g
+      // load displayed as 0. Calibrate anyway, report confidence honestly, and
+      // keep a resilient deltaA fallback so sensitivity can be estimated.
       expectedErrorGrams = Number.isFinite(snr) ? knownGrams / snr : 0;
       calibrationSnr = snr;
       confidence = snr >= 20 ? 'high' : snr >= MIN_CALIBRATION_SNR ? 'medium' : snr >= 1.5 ? 'low' : 'noise';
-    }
-
-    let deltaA = this.directionalProj.project(this.maDx.mean, this.maDy.mean);
-    if (deltaA < 0.001) {
-      return { success: false, error: 'Signal too weak — place on a soft surface (mouse pad) and use a known weight ≥ 5g' };
     }
 
     // Lock directional tilt vector from calibrated reference load
@@ -596,6 +595,14 @@ class SimpleScale {
     // Adapt noise floor if resting deflection on a firm surface is small
     if (rawDelta > 0.0001 && rawDelta <= this.directionalProj.noiseFloor * 1.5) {
       this.directionalProj.noiseFloor = Math.max(0.00005, rawDelta * 0.35);
+    }
+
+    let deltaA = this.directionalProj.project(this.maDx.mean, this.maDy.mean);
+    if (deltaA < 0.0001) {
+      deltaA = Math.max(0.0002, rawDelta * 0.7);
+    }
+    if (deltaA < 0.0001) {
+      deltaA = 0.001; // Resilient fallback deflection
     }
 
     if (!this.multiCal.addPoint(knownGrams, deltaA, options.reference || null)) {
@@ -626,7 +633,10 @@ class SimpleScale {
     if (confidence === 'noise') expected = ' — NOT RELIABLE: the weight barely moved the phone compared with the noise. Use a heavier weight or a softer surface';
     else if (confidence === 'low') expected = ' — LOW CONFIDENCE (about +/-' + expectedErrorGrams.toFixed(1) + ' g). A heavier weight or softer surface will help';
     const estimatedAccuracy = claim.count > 0 && confidence !== 'noise' && confidence !== 'low' ? claim.text + ' (measured)' : 'UNVERIFIED' + expected + ' — run VERIFY';
-    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA, expectedErrorGrams: expectedErrorGrams, snr: calibrationSnr, confidence: confidence };
+    const warning = (confidence === 'noise' || confidence === 'low' || deltaA < 0.001)
+      ? 'Signal too weak — place on a soft surface (mouse pad) and use a known weight ≥ 5g'
+      : undefined;
+    return { success: true, sensitivity: this.sensitivity, accuracy: estimatedAccuracy, calibrationPoints: points, r2: r2, deltaA: deltaA, expectedErrorGrams: expectedErrorGrams, snr: calibrationSnr, confidence: confidence, warning };
   }
 
   verifyAgainstKnown(knownWeight, options) {

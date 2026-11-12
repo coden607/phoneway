@@ -87,44 +87,39 @@ describe('calibration from the settled average', () => {
     expect(r.cal.accuracy).toMatch(/\+\/-/);
   });
 
-  it('rejects a weak signal before committing a calibration point', () => {
+  it('still calibrates a weak real-phone deflection so the scale can weigh', () => {
     const weakError = 'Signal too weak — place on a soft surface (mouse pad) and use a known weight ≥ 5g';
-    store.clear();
-    delete globalThis.window._phonewayCal;
-    const s = new SimpleScale();
-    s.baseline = { x: 0, y: 0, z: 9.8 };
-    s.motionBlocked = false;
-    s.motionQuality = 1;
-    const seedAverages = (dx, dy) => {
-      s.maDx.reset();
-      s.maDy.reset();
+    // Typical hard-table / real-phone 5 g deflections were all refused at 0.001,
+    // leaving sensitivity at 180 so the display stayed at 0.
+    for (const dx of [0.0002, 0.0005, 0.001]) {
+      store.clear();
+      delete globalThis.window._phonewayCal;
+      const scale = new SimpleScale();
+      scale.baseline = { x: 0, y: 0, z: 9.8 };
+      scale.motionBlocked = false;
+      scale.motionQuality = 1;
+      scale.maDx.reset();
+      scale.maDy.reset();
       for (let i = 0; i < 100; i++) {
-        s.maDx.update(dx);
-        s.maDy.update(dy);
+        scale.maDx.update(dx);
+        scale.maDy.update(0);
       }
-    };
-
-    seedAverages(0.0005, 0);
-    const rejected = s.calibrate(5, { force: true });
-    expect(rejected.success).toBe(false);
-    expect(rejected.error).toBe(weakError);
-    expect(s.calibrated).toBe(false);
-    expect(s.multiCal.getPointCount()).toBe(0);
-    expect(s.multiCal.points).toHaveLength(0);
-
-    seedAverages(0.05, 0);
-    const accepted = s.calibrate(5, { force: true });
-    expect(accepted.success).toBe(true);
-    const pointsBefore = s.multiCal.getPointCount();
-    const sensitivityBefore = s.sensitivity;
-
-    seedAverages(0.0002, 0);
-    const rejectedAgain = s.calibrate(5, { force: true });
-    expect(rejectedAgain.success).toBe(false);
-    expect(rejectedAgain.error).toBe(weakError);
-    expect(s.calibrated).toBe(true);
-    expect(s.multiCal.getPointCount()).toBe(pointsBefore);
-    expect(s.sensitivity).toBe(sensitivityBefore);
+      const cal = scale.calibrate(5, { force: true });
+      expect(cal.success).toBe(true);
+      expect(scale.calibrated).toBe(true);
+      expect(scale.multiCal.getPointCount()).toBeGreaterThan(0);
+      if (dx < 0.0013) expect(cal.warning).toBe(weakError);
+      scale.maDx.reset(); scale.maDy.reset();
+      scale.stabilityCheck.reset(); scale.emaWeight.reset(); scale.displayEma.reset();
+      scale.weightKalman.reset(); scale._robustGramFilter.reset();
+      scale.stableCounter = 0; scale.lastDisplayValue = 0; scale.displayWeight = 0;
+      for (let i = 0; i < 250; i++) {
+        scale.filteredAccel = { x: dx, y: 0, z: 9.8 };
+        scale._process();
+      }
+      expect(scale.displayWeight).toBeGreaterThan(1);
+      expect(Math.abs(scale.displayWeight - 5)).toBeLessThan(1.5);
+    }
   });
 
   it('rates a strong signal high confidence and a moderate one at least medium', () => {

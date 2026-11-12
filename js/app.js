@@ -976,6 +976,7 @@ class PhonewayApp {
         } catch {}
         soundEffects.playPowerChime(true);
         this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
+        if (result.warning) this._showToast(result.warning, 5000);
         hapticFeedback([30, 50, 30]);
 
         if (this._calFlowActive) {
@@ -1116,6 +1117,7 @@ class PhonewayApp {
           soundEffects.playPowerChime(true);
           hapticFeedback([30, 50, 30]);
           this._showToast(`Quick Cal saved ${grams}g. Remove the weight and tap TARE before weighing.`, 5000);
+          if (result.warning) this._showToast(result.warning, 5000);
           return;
         }
         this._setState("READY");
@@ -1153,6 +1155,7 @@ class PhonewayApp {
       const calBtn = document.getElementById('quickCalBtn');
       if (calBtn) calBtn.classList.remove('pulse');
       this._showToast(`✅ Current load locked as ${grams}g! (0.1g display resolution)`, 4000);
+      if (result.warning) this._showToast(result.warning, 5000);
     } else {
       this._showToast(`Could not lock current load: ${result.error}`, 4000);
     }
@@ -1368,6 +1371,7 @@ class PhonewayApp {
           this._calFlowStep = 4;
           render(4);
           this._updateCalibrationGuide();
+          if (res.warning) this._showToast(res.warning, 5000);
           return;
         } else {
           status.textContent = "CALIBRATION FAILED";
