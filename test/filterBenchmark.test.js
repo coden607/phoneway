@@ -1,0 +1,7 @@
+import{describe,it,expect}from'vitest';import{scoreFilter,rankFilters}from'../js/filterBenchmark.js';
+describe('filter benchmark',()=>{it('scores lower error better',()=>{const a=scoreFilter({actual:[1,1,1],pred:[1,1,1],target:1,hold:2});const b=scoreFilter({actual:[1,1,1],pred:[0,0,0],target:1,hold:2});expect(a.rmse).toBeLessThan(b.rmse)});it('ranks candidates',()=>expect(rankFilters({a:{rmse:.1,settlingSamples:3},b:{rmse:.5,settlingSamples:1}})[0].name).toBe('a'))});
+// base-refresh: rerun against current main
+
+// base-refresh-2: rerun against advanced main
+
+// base-refresh-3: validate with deterministic E2E workflow
