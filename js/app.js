@@ -1118,6 +1118,9 @@ class PhonewayApp {
           this._showToast(`Quick Cal saved ${grams}g. Remove the weight and tap TARE before weighing.`, 5000);
           return;
         }
+        this._setState("READY");
+        this._showToast("Cal failed: " + result.error, 5000);
+        return;
       }
       await new Promise(r => setTimeout(r, 150));
     }

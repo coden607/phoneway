@@ -87,20 +87,44 @@ describe('calibration from the settled average', () => {
     expect(r.cal.accuracy).toMatch(/\+\/-/);
   });
 
-  it('forced synthetic calibration still labels a weak signal honestly', () => {
-    // This is a synthetic math fixture, so it explicitly bypasses the production
-    // settled-signal gate while still checking the confidence label.
-    let labelled = 0;
-    for (const seed of SEEDS) {
-      const r = session({ sigma: 0.003, deflection: 0.0005, seed });
-      expect(r.cal.success).toBe(true);
-      expect(r.scale.calibrated).toBe(true);
-      if (r.cal.confidence === 'low' || r.cal.confidence === 'noise') {
-        labelled++;
-        expect(r.cal.accuracy).toMatch(/LOW CONFIDENCE|NOT RELIABLE/);
+  it('rejects a weak signal before committing a calibration point', () => {
+    const weakError = 'Signal too weak — place on a soft surface (mouse pad) and use a known weight ≥ 5g';
+    store.clear();
+    delete globalThis.window._phonewayCal;
+    const s = new SimpleScale();
+    s.baseline = { x: 0, y: 0, z: 9.8 };
+    s.motionBlocked = false;
+    s.motionQuality = 1;
+    const seedAverages = (dx, dy) => {
+      s.maDx.reset();
+      s.maDy.reset();
+      for (let i = 0; i < 100; i++) {
+        s.maDx.update(dx);
+        s.maDy.update(dy);
       }
-    }
-    expect(labelled).toBeGreaterThanOrEqual(17);
+    };
+
+    seedAverages(0.0005, 0);
+    const rejected = s.calibrate(5, { force: true });
+    expect(rejected.success).toBe(false);
+    expect(rejected.error).toBe(weakError);
+    expect(s.calibrated).toBe(false);
+    expect(s.multiCal.getPointCount()).toBe(0);
+    expect(s.multiCal.points).toHaveLength(0);
+
+    seedAverages(0.05, 0);
+    const accepted = s.calibrate(5, { force: true });
+    expect(accepted.success).toBe(true);
+    const pointsBefore = s.multiCal.getPointCount();
+    const sensitivityBefore = s.sensitivity;
+
+    seedAverages(0.0002, 0);
+    const rejectedAgain = s.calibrate(5, { force: true });
+    expect(rejectedAgain.success).toBe(false);
+    expect(rejectedAgain.error).toBe(weakError);
+    expect(s.calibrated).toBe(true);
+    expect(s.multiCal.getPointCount()).toBe(pointsBefore);
+    expect(s.sensitivity).toBe(sensitivityBefore);
   });
 
   it('rates a strong signal high confidence and a moderate one at least medium', () => {

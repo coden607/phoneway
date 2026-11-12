@@ -41,7 +41,8 @@ describe('settled multi-point calibration', () => {
       scale._calibrationStableSince = Date.now() - 3000;
     };
 
-    for (const [grams, dx, dy] of [[1,0.001,0.0002],[5,0.005,0.001],[10,0.010,0.002],[20,0.020,0.004]]) {
+    // 1 g deflection must stay above the 0.001 projected-signal floor (mag minus noise floor).
+    for (const [grams, dx, dy] of [[1,0.0015,0.0003],[5,0.005,0.001],[10,0.010,0.002],[20,0.020,0.004]]) {
       seedSettled(dx, dy);
       const result = scale.calibrate(grams);
       expect(result.success).toBe(true);

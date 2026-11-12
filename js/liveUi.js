@@ -47,7 +47,6 @@ function installPhonewayLiveUi() {
     const app = window.phoneway;
     if (!app || !app.scale || app._liveUiHooked) return false;
     app._liveUiHooked = true;
-    app.scale.deadbandThreshold = 0.04;
     const prevProgress = app.scale.onProgress;
     app.scale.onProgress = (info) => {
       try { if (typeof prevProgress === 'function') prevProgress(info); } catch (e) {}
