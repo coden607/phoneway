@@ -68,7 +68,8 @@ class PhonewayApp {
     try {
       this.permissions = new PermissionHelper();
       this.backgroundFusion = new BackgroundSensorFusion({
-        onUpdate: (count) => this._updateSensorBar('touchBar', Math.min(1, count / 3))
+        onUpdate: (count) => this._updateSensorBar('touchBar', Math.min(1, count / 3)),
+        onStatus: (status) => this._updateSensorSetupStatus(status)
       });
       console.log('[Phoneway] PermissionHelper created');
     } catch (e) {
@@ -321,6 +322,16 @@ class PhonewayApp {
     bind('accuracyBlock', () => { soundEffects.playKeyClick(); this._showAccuracyGuide(); });
     bind('guideClose', () => this._hideAccuracyGuide());
     bind('guideCloseBtn', () => this._hideAccuracyGuide());
+    bind('cameraRetryBtn', async () => {
+      const button = document.getElementById('cameraRetryBtn');
+      if (button) { button.disabled = true; button.textContent = 'STARTING CAMERA…'; }
+      try {
+        const started = await this.backgroundFusion.retryCamera();
+        if (!started) this._showToast('Camera could not start. Follow the setup guidance above.', 3500);
+      } finally {
+        if (button) { button.disabled = false; button.textContent = 'RETRY CAMERA SETUP'; }
+      }
+    });
 
     // Calibration modal buttons
     bind('startCalBtn', () => this._startCalibration());
@@ -1045,6 +1056,19 @@ class PhonewayApp {
   _hideAccuracyGuide() {
     const el = document.getElementById('guideOverlay');
     if (el) el.style.display = 'none';
+  }
+
+  _updateSensorSetupStatus(status) {
+    if (!status) return;
+    const el = document.getElementById('cameraSetupStatus');
+    const prefix = status.sensor === 'camera' ? 'Camera' : status.sensor === 'microphone' ? 'Microphone' : 'Sensor';
+    if (el && status.message) {
+      el.textContent = `${prefix}: ${status.message}`;
+      el.style.color = status.state === 'error' ? '#ffb36b' : status.state === 'ready' || status.state === 'active' ? '#39ff14' : '#aaa';
+    }
+    if (status.state === 'error' && status.sensor === 'camera' && status.message) {
+      this._showToast(`📷 ${status.message}`, 4500);
+    }
   }
 
   _showOnboarding() {

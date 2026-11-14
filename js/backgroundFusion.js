@@ -4,8 +4,9 @@ import { AudioAnalyzer } from "./audio.js";
 import { CameraSensor } from "./cameraSensor.js";
 
 class BackgroundSensorFusion {
-  constructor({ onUpdate } = {}) {
+  constructor({ onUpdate, onStatus } = {}) {
     this.onUpdate = onUpdate;
+    this.onStatus = onStatus;
     this.active = false;
     this.channels = new Map();
     this.touchQuality = 1;
@@ -21,6 +22,7 @@ class BackgroundSensorFusion {
 
     this.audio.onWeight = (grams, confidence) => this._feed("microphone", grams, confidence);
     this.camera.onWeight = (grams, confidence) => this._feed("camera", grams, confidence);
+    this.camera.onStatus = (status) => this._reportStatus('camera', status);
   }
 
   async start() {
@@ -35,12 +37,25 @@ class BackgroundSensorFusion {
       await this.audio.init();
       this.audio.start();
       setTimeout(() => this.audio.recordBaseline(false).catch(() => {}), 1200);
-    } catch (_) {}
+      this._reportStatus('microphone', { state: 'active', message: 'Microphone active.', recoverable: true });
+    } catch (_) {
+      this._reportStatus('microphone', { state: 'error', message: 'Microphone unavailable. Camera and accelerometer can still be used.', recoverable: true });
+    }
 
     try {
-      await this.camera.start();
-      setTimeout(() => this.camera.recordBaseline(), 1600);
-    } catch (_) {}
+      const started = await this.camera.start();
+      if (started) this.camera.recordBaseline().catch(() => {});
+    } catch (error) {
+      this._reportStatus('camera', { state: 'error', message: 'Camera setup failed. The accelerometer scale remains available.', recoverable: true, error: error?.name });
+    }
+  }
+
+  async retryCamera() {
+    if (!this.active) return false;
+    this.camera.stop();
+    const started = await this.camera.start();
+    if (started) this.camera.recordBaseline().catch(() => {});
+    return started;
   }
 
   stop() {
@@ -75,6 +90,10 @@ class BackgroundSensorFusion {
     if (!this.active || !Number.isFinite(grams) || !Number.isFinite(confidence)) return;
     this.channels.set(name, { name, grams: Math.max(0, grams), confidence: Math.max(0, Math.min(1, confidence)), timestamp: Date.now() });
     if (this.onUpdate) this.onUpdate(this.channels.size, name);
+  }
+
+  _reportStatus(sensor, status) {
+    if (typeof this.onStatus === 'function') this.onStatus({ sensor, ...status });
   }
 }
 

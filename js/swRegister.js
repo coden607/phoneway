@@ -2,9 +2,11 @@
 
 /* swRegister.js — service worker registration. Extracted from index.html. */
 
+import { VERSION } from './version.js';
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('/sw.js?v=5.0.0')
+    navigator.serviceWorker.register('/sw.js?v=' + VERSION)
       .then(function (registration) {
         console.log('[SW] Registered:', registration.scope);
 

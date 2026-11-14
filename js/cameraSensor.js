@@ -88,6 +88,7 @@ class CameraSensor {
     // Callbacks
     this.onWeight   = null;  // (grams, confidence)
     this.onPresence = null;  // (isPresent, confidence)
+    this.onStatus   = null;  // ({state, message, recoverable, error})
   }
 
   /* ── Public API ─────────────────────────────────────────────── */
@@ -95,26 +96,52 @@ class CameraSensor {
   /** Request camera permission and start frame capture. Returns true on success. */
   async start() {
     if (this.active) return true;
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      this._status('unsupported', 'This browser does not provide camera access.', false, 'NOT_SUPPORTED');
+      return false;
+    }
+    this._status('requesting', 'Requesting camera access…', true);
+    let stream = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width:      { ideal: CAM_W },
-          height:     { ideal: CAM_H },
-          frameRate:  { ideal: this._fps, min: 10 },
-          facingMode: 'environment'  // rear camera — best for table-top use
+      // Some browsers reject a valid camera when facingMode/min frame rate are
+      // unsupported. Retry with progressively simpler constraints so setup is
+      // automatic on rear-only, front-only, USB, and desktop cameras.
+      const attempts = [
+        { video: { width: { ideal: CAM_W }, height: { ideal: CAM_H }, frameRate: { ideal: this._fps }, facingMode: { ideal: 'environment' } } },
+        { video: { width: { ideal: CAM_W }, height: { ideal: CAM_H } } },
+        { video: true }
+      ];
+      let lastError;
+      for (const constraints of attempts) {
+        try { stream = await navigator.mediaDevices.getUserMedia(constraints); break; }
+        catch (error) {
+          lastError = error;
+          // A permission denial will fail every constraint variant and should
+          // produce one clear recovery instruction, not multiple prompts.
+          if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError' || error?.name === 'PermissionDeniedError') break;
         }
-      });
+      }
+      if (!stream) throw lastError || new Error('Camera access failed');
       this._video.srcObject = stream;
-      await this._video.play().catch(() => {});
+      await this._video.play();
       this.stream    = stream;
       this._ctx      = this._canvas.getContext('2d', { willReadFrequently: true });
+      if (!this._ctx) throw new Error('Camera canvas is unavailable');
       this.supported = true;
       this.active    = true;
       this._frameTimer = setInterval(() => this._captureFrame(), 1000 / this._fps);
+      this._status('active', 'Camera active. Keep the phone still while it auto-calibrates.', true);
       return true;
     } catch (e) {
-      console.warn('[CameraSensor] unavailable:', e.message);
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      const code = e && (e.name || e.code) || 'CAMERA_ERROR';
+      const message = code === 'NotAllowedError' || code === 'PermissionDeniedError'
+        ? 'Camera permission is blocked. Allow camera access in browser settings, then tap Retry.'
+        : code === 'NotFoundError' ? 'No camera was found on this device.'
+        : 'Camera could not start. The accelerometer scale still works; tap Retry after checking the setup.';
+      console.warn('[CameraSensor] unavailable:', code, e && e.message);
       this.supported = false;
+      this._status('error', message, code !== 'NotFoundError' && code !== 'NOT_SUPPORTED', code);
       return false;
     }
   }
@@ -125,6 +152,7 @@ class CameraSensor {
     if (this.stream) this.stream.getTracks().forEach(t => t.stop());
     this.stream    = null;
     this._prevGray = null;
+    this._status('stopped', 'Camera is off.', true);
   }
 
   /**
@@ -163,13 +191,29 @@ class CameraSensor {
    * Record baseline optical flow (phone empty and still).
    * Call from calibration sequence after phone settles.
    */
-  recordBaseline() {
-    if (this._flowBuf.length < 30) return false;
-    const recent = this._flowBuf.slice(-60);
+  async recordBaseline({ timeoutMs = 12000 } = {}) {
+    if (!this.active) return false;
+    this._status('calibrating', 'Camera is learning the empty-phone vibration pattern…', true);
+    const deadline = Date.now() + timeoutMs;
+    while (this.active && this._flowBuf.length < FFT_FRAMES && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+    if (!this.active || this._flowBuf.length < FFT_FRAMES) {
+      this._status('error', 'Camera needs a steadier view to auto-calibrate. Keep the phone still and tap Retry.', true, 'BASELINE_TIMEOUT');
+      return false;
+    }
+    const recent = this._flowBuf.slice(-FFT_FRAMES);
     this._baselineFlow = recent.reduce((a, b) => a + b, 0) / recent.length;
     if (this._prevGray) {
       this._baselineLum = this._prevGray.reduce((a, b) => a + b, 0) / this._prevGray.length;
     }
+    const peak = this._findPeak(recent);
+    if (!peak || peak.snr < MIN_SNR) {
+      this._status('error', 'Camera is ready, but the surface vibration is too quiet to calibrate. The main scale remains available.', true, 'BASELINE_SIGNAL');
+      return false;
+    }
+    this.baselineFreq = peak.freq;
+    this._status('ready', `Camera auto-calibrated at ${peak.freq.toFixed(1)} Hz.`, true);
     return true;
   }
 
@@ -226,7 +270,25 @@ class CameraSensor {
   _analyze(frames, report) {
     if (!this.baselineFreq || frames.length < 32) return null;
 
-    // Largest power-of-2 ≤ frames.length for FFT
+    const peak = this._findPeak(frames);
+    if (!peak) return null;
+    const filtFreq = this._freqKalman.update(peak.freq);
+    const ratio    = this.baselineFreq / filtFreq;
+    const rawG     = Math.max(0, this.phoneMass * (ratio * ratio - 1));
+    const smoothG  = this._massSmooth.update(rawG);
+
+    let conf = Math.min(MAX_CONF, Math.max(0, (peak.snr - MIN_SNR) / 20 * MAX_CONF));
+    if (this._lastAudioFreq && Math.abs(filtFreq - this._lastAudioFreq) / filtFreq < 0.15) {
+      conf = Math.min(MAX_CONF + 0.10, conf + 0.10);
+      this._crossValConf = 0.10;
+    } else this._crossValConf = 0;
+    if (report && smoothG > 0 && conf > 0.08 && this.onWeight) this.onWeight(smoothG, conf);
+    return { grams: smoothG, confidence: conf, freq: filtFreq, snr: peak.snr };
+  }
+
+  _findPeak(frames) {
+    if (!frames || frames.length < 32) return null;
+
     const N    = 1 << Math.floor(Math.log2(frames.length));
     const data = frames.slice(-N);
 
@@ -249,7 +311,6 @@ class CameraSensor {
     const minBin = Math.max(1, Math.floor(0.5 / binHz));  // 0.5 Hz
     const maxBin = Math.min(half - 2, Math.ceil(20 / binHz)); // 20 Hz
 
-    // Find spectral peak in range
     let peakMag = 0, peakBin = minBin;
     for (let i = minBin; i <= maxBin; i++) {
       if (mag[i] > peakMag) { peakMag = mag[i]; peakBin = i; }
@@ -266,27 +327,11 @@ class CameraSensor {
 
     const peakFreq = parabolicPeakFreq(mag, peakBin, binHz);
     if (peakFreq < 0.5 || peakFreq > 20) return null;
+    return { freq: peakFreq, snr };
+  }
 
-    const filtFreq = this._freqKalman.update(peakFreq);
-    const ratio    = this.baselineFreq / filtFreq;
-    const rawG     = Math.max(0, this.phoneMass * (ratio * ratio - 1));
-    const smoothG  = this._massSmooth.update(rawG);
-
-    // Base confidence from SNR, capped at MAX_CONF
-    let conf = Math.min(MAX_CONF, Math.max(0, (snr - MIN_SNR) / 20 * MAX_CONF));
-
-    // Audio cross-validation bonus: if mic and camera agree on frequency → boost
-    if (this._lastAudioFreq && Math.abs(filtFreq - this._lastAudioFreq) / filtFreq < 0.15) {
-      conf = Math.min(MAX_CONF + 0.10, conf + 0.10);  // up to 10% bonus
-      this._crossValConf = 0.10;
-    } else {
-      this._crossValConf = 0;
-    }
-
-    if (report && smoothG > 0 && conf > 0.08 && this.onWeight) {
-      this.onWeight(smoothG, conf);
-    }
-    return { grams: smoothG, confidence: conf, freq: filtFreq, snr };
+  _status(state, message, recoverable = true, error = null) {
+    if (typeof this.onStatus === 'function') this.onStatus({ state, message, recoverable, error });
   }
 }
 
