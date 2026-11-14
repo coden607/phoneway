@@ -60,7 +60,8 @@ jobs:
 
   e2e:
     name: Browser E2E / Lighthouse
-    runs-on: ubuntu-latest
+    # Playwright 1.55.1 cannot install Chromium deps on ubuntu-latest (26.04); pin a supported image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
