@@ -334,6 +334,10 @@ class SimpleScale {
     this.weightKalman.reset();
     this.maDx.reset(); this.maDy.reset();
     this.stabilityCheck.reset(); this.emaWeight.reset(); this.displayEma.reset();
+    // MAD/Hampel history is expressed in grams relative to the current zero.
+    // A new tare defines a new measurement epoch; carrying the old distribution
+    // across it can misclassify valid post-tare readings as outliers.
+    this._robustGramFilter.reset();
     this.stableCounter = 0;
     this.tempComp.calibrateZero();
     this._tare_xs = []; this._tare_ys = []; this._tare_zs = [];
@@ -352,6 +356,13 @@ class SimpleScale {
   _onSensorGap() {
     this.maDx.reset(); this.maDy.reset();
     this.stabilityCheck.reset();
+    // A stream gap means pre-gap and post-gap samples are not guaranteed to
+    // belong to the same physical state. Relearn the robust distribution from
+    // fresh samples instead of comparing against stale MAD history.
+    this._robustGramFilter.reset();
+    this.weightKalman.reset();
+    this.emaWeight.reset();
+    this.displayEma.reset();
     this.stableCounter = 0;
     this.isStable = false;
     this._driftBins = [];
@@ -614,6 +625,12 @@ class SimpleScale {
     const blend = this.multiCal.points.length <= 1 ? 1.0 : 0.6;
     this.sensitivity = blend * newSensitivity + (1 - blend) * this.sensitivity;
     this.calibrated = true;
+    // Calibration changes the acceleration→grams transform. Any robust-filter
+    // history collected under the old sensitivity is now in the wrong gram
+    // space and must not influence the new calibration epoch.
+    this._robustGramFilter.reset();
+    this.weightKalman.reset();
+    this.displayEma.reset();
     this.emaWeight.reset();
     this.stabilityCheck.reset();
     this.stableCounter = 0;
