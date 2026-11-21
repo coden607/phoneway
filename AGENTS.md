@@ -1,3 +1,5 @@
+> **Current accuracy/portfolio truth — November 2026:** This file contains historical v4.x descriptions and claims such as “±0.1g achieved,” 15-sensor fusion and deployed URLs. Those are **not current verification evidence**. For current behavior cite [README.md](README.md), [ACCURACY_FEATURES.md](ACCURACY_FEATURES.md), and the on-device Verification Ledger. **0.1g is display resolution, not guaranteed physical accuracy**; accuracy stays UNVERIFIED until five valid reference-weight verification runs on the actual device/surface. Do not repeat historical claims in job applications, public product copy or agent output as established facts. Do not delete this historical context without a separate review.
+
 <!-- BEGIN coden607-skills (managed block; safe to re-run installer) -->
 # 🧠 Continuity OS Universal Directives (Always-On)
 
