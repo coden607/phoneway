@@ -1,5 +1,34 @@
 # PhoneWeigh
 
+<!-- showcase:start -->
+**A tilt-based digital scale that runs in your phone’s browser and only claims the accuracy it has measured.**
+
+[![Live demo](https://img.shields.io/badge/live_demo-phoneweigh--ecru.vercel.app-2ea44f?logo=vercel)](https://phoneweigh-ecru.vercel.app) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+![PhoneWeigh live demo screenshot](docs/screenshot.png)
+
+**Live demo:** https://phoneweigh-ecru.vercel.app
+
+### Highlights
+
+- Installable, offline-capable PWA in vanilla ES modules: zero runtime dependencies, no build step
+- Known-weight calibration fitted to your specific phone and surface
+- On-device Verification Ledger; numeric accuracy claims stay hidden until five verification runs are complete
+- Ledger diagnostics: signed bias, MAE, RMSE, worst error, exportable snapshot
+
+**Tech stack:** Vanilla JavaScript (ES modules), Web APIs (DeviceMotion, Service Worker, Web App Manifest), Vitest, Vercel
+
+**Run locally:**
+
+```bash
+npm ci
+npm run serve   # local static server
+npm test        # unit tests
+```
+
+<!-- showcase:end -->
+
+
 **A tilt-based digital precision scale that runs in your phone's browser — and tells you the truth about its own accuracy.**
 
 PhoneWeigh measures weight by the deflection of the phone's gravity axis when a load presses on it. **Display resolution: 0.1g.** Measured accuracy is **whatever your Verification Ledger proves on this device and surface**. A numeric accuracy claim is withheld until five verification runs are complete.
