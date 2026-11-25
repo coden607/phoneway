@@ -13,6 +13,7 @@ import './swRegister.js';
 import './pwaInstall.js';
 import { VERSION as APP_VERSION } from './version.js';
 import { SimpleScale, MovingAverage } from './simpleScale.js';
+import { calStep2ButtonState } from './calStep2.js';
 import { BackgroundSensorFusion } from './backgroundFusion.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
 import {
@@ -1024,8 +1025,11 @@ class PhonewayApp {
    *  - { outcome: 'failed', reason }    — calibrate() refused; stay in step 2
    * On every non-registered outcome the flow is deliberately left open
    * (_pendingCalibration / _calFlowStep untouched) so TARE can be retried.
+   * Pass { forceWeak: true } ONLY from the walkthrough's too-weak options
+   * (user tapped LOCK ANYWAY after the force timeout): the snr < 1.5 refusal
+   * is then honoured via the forced path instead of returning 'too-weak'.
    */
-  _registerCalibrationWeight() {
+  _registerCalibrationWeight({ forceWeak = false } = {}) {
     const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
     const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
 
@@ -1048,6 +1052,16 @@ class PhonewayApp {
     // sensor cannot support — an empty phone would lock garbage — unless the
     // user has waited long enough that the signal is what it is.
     if (readiness.snr < 1.5) {
+      // Round 2: the user explicitly chose LOCK ANYWAY from the too-weak
+      // options after the force timeout, so honour it through the forced
+      // path (same as the snr >= 1.5 force case below). TARE and the plain
+      // walkthrough tap never pass forceWeak, so they still refuse here.
+      if (forceWeak && elapsed >= CAL_STEP2_FORCE_AFTER_MS) {
+        const forcedResult = this.scale.calibrate(this.calWeightG, { force: true, reference: this.calReference });
+        return forcedResult.success
+          ? { outcome: 'registered', result: forcedResult, forced: true }
+          : { outcome: 'failed', reason: forcedResult.error };
+      }
       return { outcome: 'too-weak', reason: 'Signal too weak to register — the weight barely moved the phone. Use a softer surface (mouse pad, cloth) or a heavier weight, then press TARE again.' };
     }
     if (elapsed < CAL_STEP2_FORCE_AFTER_MS) {
@@ -1381,11 +1395,23 @@ class PhonewayApp {
   // while the flow is in step 2 and keeps the action button truthful: it
   // unlocks as soon as the signal is ready, advances the thin progress bar
   // with the settling time, and after CAL_STEP2_FORCE_AFTER_MS without a
-  // usable signal it offers an explicit exit (no motion data at all) or a
-  // warned LOCK ANYWAY instead of leaving the button disabled forever.
+  // usable signal it offers an explicit exit (no motion data at all), a
+  // warned LOCK ANYWAY (snr >= 1.5), or the too-weak options (samples exist
+  // but snr < 1.5) instead of leaving the button disabled forever, and it
+  // says so once via toast so the flow never stalls silently. The
+  // button state comes from the pure calStep2ButtonState() helper so the
+  // branch decision is unit-testable; the settling label names the live
+  // readiness reason so the user sees WHY it is stuck.
   _startCalStep2Interval(button, status, progress) {
     if (this._calStep2Interval) clearInterval(this._calStep2Interval);
     this._calStep2NoSensor = false;
+    this._calStep2TooWeak = false;
+    this._calStep2WeakOptions = false;
+    // One-shot watchdog message: the first time the flow enters a
+    // post-timeout escape state, say so out loud (toast) instead of just
+    // relabelling the button — QUICK CAL times out with a toast after ~35 s,
+    // and the walkthrough must not sit silently in any stall state.
+    this._calStep2EscapeToasted = false;
     this._calStep2Interval = setInterval(() => {
       if (this._calFlowStep !== 2) {
         clearInterval(this._calStep2Interval);
@@ -1394,28 +1420,51 @@ class PhonewayApp {
       }
       const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
       const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
-      const held = Math.min(2.5, (readiness.stableMs || 0) / 1000).toFixed(1);
       const step2Pct = 50 + Math.min(25, (readiness.stableMs || 0) / 100);
       if (progress) progress.style.width = step2Pct + '%';
       const thin = document.getElementById('calProgress');
       if (thin) thin.style.width = step2Pct + '%';
       if (button) {
-        if (readiness.ready) {
+        const state = calStep2ButtonState(readiness, elapsed, this.calWeightG, CAL_STEP2_FORCE_AFTER_MS);
+        if ((state.kind === 'no-sensor' || state.kind === 'too-weak' || state.kind === 'lock-anyway') && !this._calStep2EscapeToasted) {
+          this._calStep2EscapeToasted = true;
+          this._showToast(
+            state.kind === 'no-sensor'
+              ? 'No motion data on this device — tap the button to exit calibration.'
+              : state.kind === 'too-weak'
+                ? 'Signal too weak to lock — tap the button for options.'
+                : 'Signal is weak but usable — tap LOCK ANYWAY to calibrate (unverified).',
+            6000);
+        }
+        if (state.kind === 'ready' || state.kind === 'lock-anyway') {
+          // Signal usable again (or user already confirmed a weak lock):
+          // drop the too-weak state so the button means what it says.
           this._calStep2NoSensor = false;
+          this._calStep2TooWeak = false;
+          this._calStep2WeakOptions = false;
           button.disabled = false;
-          button.textContent = `READY · LOCK ${this.calWeightG}g`;
-        } else if (readiness.sampleCount === 0 && elapsed >= CAL_STEP2_FORCE_AFTER_MS) {
+          button.textContent = state.label;
+        } else if (state.kind === 'no-sensor') {
           this._calStep2NoSensor = true;
+          this._calStep2TooWeak = false;
+          this._calStep2WeakOptions = false;
           button.disabled = false;
-          button.textContent = 'NO SENSOR DATA — TAP TO EXIT';
-        } else if (elapsed >= CAL_STEP2_FORCE_AFTER_MS && readiness.snr >= 1.5) {
+          button.textContent = state.label;
+        } else if (state.kind === 'too-weak') {
           this._calStep2NoSensor = false;
+          this._calStep2TooWeak = true;
           button.disabled = false;
-          button.textContent = `LOCK ANYWAY (${this.calWeightG}g · UNVERIFIED)`;
+          // If the user already opened the options, the button now means
+          // LOCK ANYWAY — do not overwrite it with the prompt label.
+          button.textContent = this._calStep2WeakOptions
+            ? `LOCK ANYWAY (${this.calWeightG}g · UNVERIFIED)`
+            : state.label;
         } else {
           this._calStep2NoSensor = false;
+          this._calStep2TooWeak = false;
+          this._calStep2WeakOptions = false;
           button.disabled = true;
-          button.textContent = `SETTLING ${held}/2.5s · ${readiness.sampleCount}/80`;
+          button.textContent = state.label;
         }
       }
       if (status) {
@@ -1484,7 +1533,7 @@ class PhonewayApp {
           button: "START TARE"
         },
         2: {
-          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g reference weight on the phone and keep it still.\n\nReading will lock automatically, or tap LOCK to calibrate.",
+          body: "STEP 2\n\nPlace the selected " + this.calWeightG + "g reference weight on the phone and keep it still.\n\nThe reading locks automatically once the signal is steady. The button below shows what is happening — tap it when it offers a lock or options.",
           status: "PLACE WEIGHT · HOLD STILL",
           progress: "50%",
           button: "HOLD STILL..."
@@ -1570,6 +1619,19 @@ class PhonewayApp {
           this._showToast('No motion data on this device — calibration needs a phone with working motion sensors.', 6000);
           return;
         }
+        // Round 2: the watchdog's SIGNAL TOO WEAK state. First tap opens the
+        // options — the reason, the guidance, and both ways forward — instead
+        // of silently refusing. The button then means LOCK ANYWAY (the
+        // interval holds that label while the options are open); the second
+        // tap confirms it. EXIT is the × at the top right of this card.
+        if (this._calStep2TooWeak && !this._calStep2WeakOptions) {
+          this._calStep2WeakOptions = true;
+          status.textContent = 'SIGNAL TOO WEAK';
+          body.textContent = 'SIGNAL TOO WEAK\n\nThe ' + this.calWeightG + 'g weight barely moves the phone on this surface, so its signal is lost in the sensor noise — samples are full (80/80) but nothing is strong enough to trust.\n\nTry a softer surface (mouse pad, folded cloth) or a heavier known weight, and hold perfectly still.\n\nTap LOCK ANYWAY to calibrate anyway (UNVERIFIED — verify against a known weight before trusting readings), or tap × at the top right to exit calibration.';
+          button.disabled = false;
+          button.textContent = `LOCK ANYWAY (${this.calWeightG}g · UNVERIFIED)`;
+          return;
+        }
         if (this._calStep2Interval) {
           clearInterval(this._calStep2Interval);
           this._calStep2Interval = null;
@@ -1578,8 +1640,12 @@ class PhonewayApp {
         status.textContent = 'CALIBRATING...';
         body.textContent = 'Locking sensitivity for ' + this.calWeightG + 'g. Keep phone still...';
         // Same state machine as the physical TARE press: register the weight,
-        // or stay in step 2 with an explicit reason and a retry.
-        const outcome = this._registerCalibrationWeight();
+        // or stay in step 2 with an explicit reason and a retry. When the
+        // user confirmed LOCK ANYWAY from the too-weak options, forceWeak
+        // lets the weak signal through the forced path.
+        const outcome = this._registerCalibrationWeight({ forceWeak: this._calStep2WeakOptions });
+        this._calStep2WeakOptions = false;
+        this._calStep2TooWeak = false;
         if (outcome.outcome === 'registered') {
           this._onCalibrationRegistered(outcome.result, outcome.forced);
           return;
