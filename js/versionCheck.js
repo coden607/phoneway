@@ -4,7 +4,7 @@
  * scripts/check-static.mjs enforces this in CI. */
 'use strict';
 
-var PHONEWAY_VERSION = '5.3.4';
+var PHONEWAY_VERSION = '5.3.6';
 var storedVersion = null;
 try { storedVersion = localStorage.getItem('phoneway_version'); } catch (e) {}
 
@@ -16,6 +16,16 @@ if (storedVersion && storedVersion !== PHONEWAY_VERSION) {
   }
   try { localStorage.setItem('phoneway_version', PHONEWAY_VERSION); } catch (e) {}
   console.log('[Phoneway] Updated to version', PHONEWAY_VERSION);
+  // Reload once so the page cannot keep running a mix of old and new
+  // modules after the caches were purged. The session flag guards against a
+  // reload loop; sessionStorage is wrapped in try/catch because Brave
+  // private mode can throw on access.
+  var reloaded = false;
+  try { reloaded = sessionStorage.getItem('phoneway_version_reloaded') === PHONEWAY_VERSION; } catch (e) {}
+  if (!reloaded) {
+    try { sessionStorage.setItem('phoneway_version_reloaded', PHONEWAY_VERSION); } catch (e) {}
+    setTimeout(function () { location.reload(); }, 300);
+  }
 } else if (!storedVersion) {
   try { localStorage.setItem('phoneway_version', PHONEWAY_VERSION); } catch (e) {}
 }

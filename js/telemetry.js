@@ -178,15 +178,19 @@ export class Telemetry {
    * Returns null if offline or endpoint unavailable.
    * Caches in localStorage for 6 h so we don't re-fetch every boot.
    */
-  async fetchGlobalStats() {
-    // Serve from cache if fresh enough
-    try {
-      const cached = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
-      if (cached && (Date.now() - cached._fetchedAt) < STATS_TTL) {
-        this._globalStats = cached;
-        return cached;
-      }
-    } catch {}
+  async fetchGlobalStats(force = false) {
+    // Serve from cache if fresh enough — unless `force` is set (the Accuracy
+    // Report's ↻ RETRY), which skips the 6 h cache so a retry actually
+    // re-fetches instead of re-serving the stale failure.
+    if (!force) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+        if (cached && (Date.now() - cached._fetchedAt) < STATS_TTL) {
+          this._globalStats = cached;
+          return cached;
+        }
+      } catch {}
+    }
 
     try {
       const res = await fetch(`/api/stats?class=${encodeURIComponent(this._deviceClass)}`, {
