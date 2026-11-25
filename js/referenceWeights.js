@@ -96,6 +96,25 @@ function getRecommendedWeights() {
 }
 
 /**
+ * Get recommended weights for the verify panel, deduplicated by (icon, grams)
+ * and limited to `limit` entries. The old panel rendered icon + grams only,
+ * so same-gram entries (e.g. three 💵 1g bills) were indistinguishable
+ * duplicates. Dedupe here so the panel can never show two identical chips.
+ */
+function getVerifyChipWeights(limit = 6) {
+  const seen = new Set();
+  const out = [];
+  for (const w of getRecommendedWeights()) {
+    const key = `${w.icon}|${w.grams}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
  * Get weights by category
  */
 function getWeightsByCategory(category) {
@@ -187,6 +206,7 @@ export {
   CALIBRATION_WEIGHTS,
   ALL_REFERENCE_WEIGHTS,
   getRecommendedWeights,
+  getVerifyChipWeights,
   getWeightsByCategory,
   getWeightById,
   getWeightsInRange,

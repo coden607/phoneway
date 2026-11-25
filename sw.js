@@ -1,11 +1,11 @@
 /**
- * sw.js — Service Worker for Phoneway Scale v5.3.4
+ * sw.js — Service Worker for Phoneway Scale v5.3.5
  *
  * Caches ONLY the live module graph (dead modules removed 2026-10-08,
  * see docs/legacy/DEAD-CODE-2026-10-08.md).
  */
 
-const CACHE = 'phoneway-v5.3.4';
+const CACHE = 'phoneway-v5.3.5';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -71,7 +71,9 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const isAPI = e.request.url.includes('/api/') || e.request.url.includes('vercel');
   if (isAPI) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    e.respondWith(fetch(e.request).catch(() =>
+      caches.match(e.request).then(r => r || new Response(JSON.stringify({ error: 'offline' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
+    ));
     return;
   }
   e.respondWith(
@@ -88,7 +90,16 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => cached);
+      }).catch(() => {
+        // A cache miss plus a failed network used to respondWith(undefined),
+        // which fails the navigation outright and leaves a blank page. For
+        // navigations fall back to the cached app shell so the app still
+        // loads offline; anything else gets a real 503 Response.
+        if (e.request.mode === 'navigate') {
+          return caches.match(BASE + 'index.html');
+        }
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+      });
     })
   );
 });

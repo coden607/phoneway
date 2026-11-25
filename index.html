@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"            content="PhoneWeigh"/>
   <meta name="theme-color"                           content="#00d4ff"/>
   <title>PhoneWeigh v5.3.4 — Gold Skull Digital Precision Scale</title>
-  <link rel="manifest"          href="manifest.json?v=5.3.4"/>
+  <link rel="manifest"          href="manifest.json?v=5.3.5"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=5.3.4"/>
+  <link rel="stylesheet"        href="css/style.css?v=5.3.5"/>
 <style>
 /* ── Precision estimate label (under accuracy bar) ────────── */
 .prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
@@ -66,7 +66,7 @@
 .guide-issue strong{color:#e8c84a}
 </style>
 
-<script src="js/versionCheck.js?v=5.3.4"></script>
+<script src="js/versionCheck.js?v=5.3.5"></script>
 </head>
 <body>
 
@@ -442,7 +442,7 @@
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <div id="footer">
     <div class="footer-stack">
-      <div class="footer-text">PHONEWEIGH v5.1 · DIGITAL SCALE · 0.1g RESOLUTION · ACCURACY = YOUR VERIFICATION LEDGER</div>
+      <div class="footer-text">PHONEWEIGH v5.3.5 · DIGITAL SCALE · 0.1g RESOLUTION · ACCURACY = YOUR VERIFICATION LEDGER</div>
       <div class="footer-credit">CREATED BY <span class="credit-name">STEVE B</span> AKA <span class="credit-handle">CODEN809</span></div>
     </div>
     <div class="footer-gems">
@@ -501,6 +501,7 @@
 
     <div class="modal-btns modal-btns-accuracy">
       <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
+      <button class="modal-btn" id="onboardDismissBtn">NOT NOW</button>
       <p class="tip-note"><strong>Resolution 0.1g · Accuracy = your calibration result</strong> (typically ±0.5g; see the Verification Ledger). Verify three known weights to establish your measured accuracy on this device and surface.</p>
     </div>
   </div>
@@ -748,6 +749,7 @@
     <div style="background: #0a0f1a; border: 1px solid #1a2a3a; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
       <div style="color: #44aaff; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">🌐 COMMUNITY ACCURACY</div>
       <div id="accCommunity" style="color:#555;font-size:11px">Loading…</div>
+      <button id="accCommunityRetry" style="margin-top:8px;background:none;border:1px solid #2a3a4a;color:#88aacc;font-size:10px;letter-spacing:1px;padding:4px 10px;border-radius:4px;cursor:pointer">↻ RETRY</button>
     </div>
 
     <!-- Environmental Status -->
@@ -769,7 +771,7 @@
 </div>
 
 <!-- ── Pre-module error trap (catches ES module load failures; must stay a classic script) -->
-<script src="js/errorTrap.js?v=5.3.4"></script>
+<script src="js/errorTrap.js?v=5.3.5"></script>
 
 <!-- ══════════════════════════════════════════════════════════
      BUTTON TOOLTIP OVERLAY (long-press any button for help)
@@ -933,7 +935,7 @@
 
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=5.3.4"></script>
+<script type="module" src="js/app.js?v=5.3.5"></script>
 
 
 

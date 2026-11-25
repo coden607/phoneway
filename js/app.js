@@ -15,9 +15,10 @@ import { VERSION as APP_VERSION } from './version.js';
 import { SimpleScale, MovingAverage } from './simpleScale.js';
 import { BackgroundSensorFusion } from './backgroundFusion.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
-import { 
-  ALL_REFERENCE_WEIGHTS, 
+import {
+  ALL_REFERENCE_WEIGHTS,
   getRecommendedWeights,
+  getVerifyChipWeights,
   getBestVerificationWeight,
   calculateVerification,
   US_COINS,
@@ -42,6 +43,11 @@ import {
 import { soundEffects } from './soundEffects.js';
 import { VibrationResonanceChannel, SETTLE_MS, SAMPLE_WINDOW_MS } from './channels/vibration-resonance.js';
 import { CERTIFIED_5_POINT, HOUSEHOLD_5_POINT } from './calibrationReferences.js';
+
+// How long calibration step 2 must run before a weak-signal TARE press is
+// allowed to lock anyway (with an UNVERIFIED warning). A healthy phone
+// settles in ~3-4 s, so 10 s means the signal is genuinely weak, not slow.
+const CAL_STEP2_FORCE_AFTER_MS = 10000;
 
 const UNITS = UNITS_CONFIG;
 
@@ -92,6 +98,16 @@ class PhonewayApp {
     this.calReference = null;
     this.calibrationTargetPoints = 5;
     this._pendingCalibration = false;
+    // Step-2 watchdog state: TARE is the confirm-weight action during
+    // calibration — it must always produce a visible outcome, never a silent
+    // re-zero. _calStep2ForceAt is the timestamp after which a weak-signal
+    // step-2 press may lock anyway (with a warning); _noMotionData starts
+    // true and is cleared by the first devicemotion sample (see onRaw), so
+    // the power-on watchdog can tell "no sensor stream" from "stream alive".
+    this._calStep2ForceAt = 0;
+    this._calStep2NoSensor = false;
+    this._noMotionData = true;
+    this._verifyWaitTimer = null;
     this._holdActive = false;
     this._selectedRefWeight = null;
     this._precisionMode = false;
@@ -118,6 +134,9 @@ class PhonewayApp {
     };
     this.scale.onStable = (g) => this._onStableReading(g);
     this.scale.onRaw = (x, y, z) => {
+      // A live motion stream exists — clear the no-motion-data flag so the
+      // power-on watchdog and the step-2 watchdog do not report a dead sensor.
+      this._noMotionData = false;
       this._updateSpiritLevel(x, y, z);
       // Ensure corner competency & percentile reading always updates in real time
       if (!this.powered || this._precisionMode) {
@@ -184,6 +203,17 @@ class PhonewayApp {
           this._togglePower();
         }
       }, 800);
+
+      // Motion-data watchdog: DeviceMotionEvent exists on desktop browsers but
+      // never fires there, and the scale silently read 0 forever. If no
+      // motion sample arrives within ~6 s of power-on, say so plainly instead
+      // of letting calibration and readings hang.
+      setTimeout(() => {
+        if (this.powered && this._noMotionData) {
+          this._showToast('No motion data from this device — accelerometer stream is empty. Weighing needs a phone with working motion sensors.', 7000);
+          this._updateSensorSetupStatus({ sensor: 'motion', state: 'empty', message: 'No motion data — accelerometer stream is empty on this device.' });
+        }
+      }, 7000);
       
       // Send telemetry about startup
       this._sendTelemetry('startup', { 
@@ -264,14 +294,27 @@ class PhonewayApp {
       const ledStable = document.getElementById('ledStable');
       const ledAudio = document.getElementById('ledAudio');
       
-      if (digitDisplay) this.display = new SevenSegmentDisplay(digitDisplay, 5, 2);
+      if (digitDisplay) {
+        this.display = new SevenSegmentDisplay(digitDisplay, 5, 2);
+        // Show a real 0.00 on load instead of the faint ghost "888.88" — the
+        // scale is zeroed until the first reading arrives.
+        this.display.setValue(0);
+      }
       if (stabilityBar) this.stabBar = new StabilityBar(stabilityBar);
       if (ledPower) this.ledPower = new LED(ledPower);
       if (ledStable) this.ledStable = new LED(ledStable);
       if (ledAudio) {
         this.ledAudio = new LED(ledAudio);
-        this.ledAudio.on(soundEffects.isMuted() ? 'off' : 'green');
+        // Do NOT light the MIC LED from the sound-effects mute state: it must
+        // reflect the real microphone channel, driven by
+        // _updateSensorSetupStatus once the fusion engine starts. A muted
+        // sound-effects toggle must never read as a live mic.
       }
+      // The CAM LED exists in the DOM but was never wired to any JS, so it
+      // stayed off forever. Create it here; _updateSensorSetupStatus drives
+      // it from the real camera channel.
+      const ledCamera = document.getElementById('ledCamera');
+      if (ledCamera) this.ledCamera = new LED(ledCamera);
     } catch (e) {
       console.error('Display init error:', e);
     }
@@ -301,9 +344,12 @@ class PhonewayApp {
     bind('btnPrecision', () => { soundEffects.playKeyClick(); this._precisionMeasure(); });
     bind('btnStats', () => { soundEffects.playKeyClick(); this._showStats(); });
     bind('btnLight', () => this._toggleBacklight());
+    // The MIC LED is a sound-effects mute toggle, but the LED itself must
+    // show the real microphone channel (driven by
+    // _updateSensorSetupStatus), not the mute state — tapping it only flips
+    // the mute flag and reports it via toast.
     bind('ledAudio', () => {
       const active = soundEffects.toggleMute();
-      if (this.ledAudio) this.ledAudio.on(active ? 'green' : 'off');
       this._showToast(active ? '🔊 Scale audio effects: ON' : '🔇 Scale audio muted', 1500);
     });
     
@@ -335,6 +381,8 @@ class PhonewayApp {
 
     // Calibration modal buttons
     bind('startCalBtn', () => this._startCalibration());
+    bind('onboardDismissBtn', () => this._dismissOnboarding());
+    bind('accCommunityRetry', () => this._updateStats(true));
     bind('calCancelBtn', () => this._hideCalModal());
     bind('calCloseXBtn', () => this._hideCalModal());
     bind('calConfirmBtn', () => this._proceedWithCalibration());
@@ -962,6 +1010,99 @@ class PhonewayApp {
     }
   }
 
+  /**
+   * The confirm-weight action for calibration step 2, shared by the physical
+   * TARE button and the guided walkthrough button. A TARE press during
+   * calibration must ALWAYS produce a visible outcome — it used to fall
+   * through to a plain re-zero whenever the live reading was small, which is
+   * why "press TARE to calibrate and then it dies — nothing happens".
+   * Returns one of:
+   *  - { outcome: 'registered', result, forced } — weight registered, flow may advance
+   *  - { outcome: 'waiting', reason }   — still collecting/settling; stay in step 2
+   *  - { outcome: 'no-sensor', reason } — no motion stream at all; stay (or exit)
+   *  - { outcome: 'too-weak', reason }  — signal too weak to trust; stay in step 2
+   *  - { outcome: 'failed', reason }    — calibrate() refused; stay in step 2
+   * On every non-registered outcome the flow is deliberately left open
+   * (_pendingCalibration / _calFlowStep untouched) so TARE can be retried.
+   */
+  _registerCalibrationWeight() {
+    const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
+    const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
+
+    if (readiness.sampleCount === 0) {
+      if (elapsed < CAL_STEP2_FORCE_AFTER_MS) {
+        return { outcome: 'waiting', reason: 'Collecting motion samples — hold the phone still, then press TARE again.' };
+      }
+      return { outcome: 'no-sensor', reason: 'No motion data — this device is not sending accelerometer samples, so the weight cannot be registered. Calibration needs a phone.' };
+    }
+    if (readiness.sampleCount < 80) {
+      return { outcome: 'waiting', reason: `Collecting samples (${readiness.sampleCount}/80) — hold still, then press TARE again.` };
+    }
+    if (readiness.ready) {
+      const result = this.scale.calibrate(this.calWeightG, { reference: this.calReference });
+      return result.success
+        ? { outcome: 'registered', result }
+        : { outcome: 'failed', reason: result.error };
+    }
+    // Signal exists but is not settled/strong enough. Refuse a lock the
+    // sensor cannot support — an empty phone would lock garbage — unless the
+    // user has waited long enough that the signal is what it is.
+    if (readiness.snr < 1.5) {
+      return { outcome: 'too-weak', reason: 'Signal too weak to register — the weight barely moved the phone. Use a softer surface (mouse pad, cloth) or a heavier weight, then press TARE again.' };
+    }
+    if (elapsed < CAL_STEP2_FORCE_AFTER_MS) {
+      return { outcome: 'waiting', reason: 'Still settling — hold the phone perfectly still, then press TARE again.' };
+    }
+    const result = this.scale.calibrate(this.calWeightG, { force: true, reference: this.calReference });
+    return result.success
+      ? { outcome: 'registered', result, forced: true }
+      : { outcome: 'failed', reason: result.error };
+  }
+
+  // Shared success path for a registered calibration weight, used by TARE
+  // and by the walkthrough button. Clears the pending state, reports the
+  // result (including the UNVERIFIED warning when the lock was forced), and
+  // advances the guided flow to step 4.
+  _onCalibrationRegistered(result, forced) {
+    const points = result.calibrationPoints;
+    this._pendingCalibration = false;
+    try {
+      telemetry.logCalibration(this.scale.sensitivity, this.scale.getSurfaceQuality(), points, 0);
+    } catch {}
+    soundEffects.playPowerChime(true);
+    const forcedNote = forced ? ' (UNVERIFIED — weak signal; verify with a known weight before trusting readings)' : '';
+    this._showToast(`Calibrated! ${result.accuracy} (${points} points)${forcedNote}`, forced ? 6000 : 4000);
+    if (result.warning) this._showToast(result.warning, 5000);
+    hapticFeedback([30, 50, 30]);
+
+    if (this._calFlowActive) {
+      this._calFlowStep = 4;
+      const overlay = document.getElementById('stepOverlay');
+      if (overlay) {
+        const body = overlay.querySelector('.step-body');
+        const status = document.getElementById('calSensorStatus');
+        const button = document.getElementById('calReadyBtn');
+        const progress = document.getElementById('calStepProgress');
+        if (body) body.textContent = 'CALIBRATION COMPLETE!\n\n👉 Remove the ' + this.calWeightG + 'g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.';
+        if (status) status.textContent = 'REMOVE WEIGHT · TAP DONE';
+        if (progress) progress.style.width = '100%';
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'DONE';
+        }
+        const thin = document.getElementById('calProgress');
+        if (thin) thin.style.width = '100%';
+      }
+    }
+
+    if (points < 3) {
+      setTimeout(() => {
+        this._showToast(`Tip: Add ${4 - points} more weights for better accuracy`, 4000);
+      }, 4500);
+    }
+    this._updateCalibrationGuide();
+  }
+
   async _tare() {
     if (!this.powered) return;
 
@@ -977,48 +1118,19 @@ class PhonewayApp {
     }
 
     if (this._pendingCalibration || this._calFlowStep === 2) {
-      this._pendingCalibration = false;
-
-      const result = this.scale.calibrate(this.calWeightG);
-      if (result.success) {
-        const points = result.calibrationPoints;
-        try {
-          telemetry.logCalibration(this.scale.sensitivity, this.scale.getSurfaceQuality(), points, 0);
-        } catch {}
-        soundEffects.playPowerChime(true);
-        this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
-        if (result.warning) this._showToast(result.warning, 5000);
-        hapticFeedback([30, 50, 30]);
-
-        if (this._calFlowActive) {
-          this._calFlowStep = 4;
-          const overlay = document.getElementById("stepOverlay");
-          if (overlay) {
-            const body = overlay.querySelector(".step-body");
-            const status = document.getElementById("calSensorStatus");
-            const button = document.getElementById("calReadyBtn");
-            const progress = document.getElementById("calStepProgress");
-            if (body) body.textContent = "CALIBRATION COMPLETE!\n\n👉 Remove the " + this.calWeightG + "g reference weight from the phone now.\n\nTap DONE to zero baseline and start weighing.";
-            if (status) status.textContent = "REMOVE WEIGHT · TAP DONE";
-            if (progress) progress.style.width = "100%";
-            if (button) {
-              button.disabled = false;
-              button.textContent = "DONE";
-            }
-          }
-        }
-
-        if (points < 3) {
-          setTimeout(() => {
-            this._showToast(`Tip: Add ${4 - points} more weights for better accuracy`, 4000);
-          }, 4500);
-        }
-        this._updateCalibrationGuide();
+      // TARE is the confirm-weight action during calibration: it must always
+      // produce a visible outcome. It used to fall through to a plain
+      // re-zero whenever the live reading was small, so "press TARE to
+      // calibrate and then it dies". The helper registers the weight, or
+      // says exactly why it cannot yet — and the flow stays open for retry.
+      const outcome = this._registerCalibrationWeight();
+      if (outcome.outcome === 'registered') {
+        this._onCalibrationRegistered(outcome.result, outcome.forced);
       } else {
         try {
-          telemetry.logSensorError("calibration", result.error);
+          telemetry.logSensorError('calibration', outcome.reason);
         } catch {}
-        this._showToast("Cal failed: " + result.error, 4000);
+        this._showToast(outcome.reason, 6000);
       }
       return;
     }
@@ -1061,11 +1173,19 @@ class PhonewayApp {
   _updateSensorSetupStatus(status) {
     if (!status) return;
     const el = document.getElementById('cameraSetupStatus');
-    const prefix = status.sensor === 'camera' ? 'Camera' : status.sensor === 'microphone' ? 'Microphone' : 'Sensor';
+    const prefix = status.sensor === 'camera' ? 'Camera' : status.sensor === 'microphone' ? 'Microphone' : status.sensor === 'motion' ? 'Motion' : 'Sensor';
     if (el && status.message) {
       el.textContent = `${prefix}: ${status.message}`;
       el.style.color = status.state === 'error' ? '#ffb36b' : status.state === 'ready' || status.state === 'active' ? '#39ff14' : '#aaa';
     }
+    // Drive the CAM / MIC LEDs from the real channel state. Before this fix
+    // the CAM LED was never wired to any JS (stuck off forever) and the MIC
+    // LED showed the sound-effects mute state, so the indicators claimed
+    // nothing about the actual sensors. A channel that is not ready, denied,
+    // or empty now reads as off — never as active.
+    const on = status.state === 'ready' || status.state === 'active';
+    if (status.sensor === 'camera' && this.ledCamera) this.ledCamera.on(on ? 'green' : 'off');
+    if (status.sensor === 'microphone' && this.ledAudio) this.ledAudio.on(on ? 'green' : 'off');
     if (status.state === 'error' && status.sensor === 'camera' && status.message) {
       this._showToast(`📷 ${status.message}`, 4500);
     }
@@ -1073,8 +1193,22 @@ class PhonewayApp {
 
   _showOnboarding() {
     if (this.scale.calibrated) return;
+    // A dismissed setup must not re-block the UI on every reload. The flag
+    // is persisted via UniversalStorage (localStorage with a memory fallback
+    // for private mode); the user can still open setup any time via CAL.
+    try {
+      if (this.storage && this.storage.get('phoneway_onboard_dismissed')) return;
+    } catch {}
     const modal = document.getElementById('onboardModal');
     if (modal) modal.style.display = 'flex';
+  }
+
+  _dismissOnboarding() {
+    try {
+      if (this.storage) this.storage.set('phoneway_onboard_dismissed', '1');
+    } catch {}
+    const modal = document.getElementById('onboardModal');
+    if (modal) modal.style.display = 'none';
   }
 
   _hideCalModal() {
@@ -1243,6 +1377,55 @@ class PhonewayApp {
     });
   }
 
+  // Step-2 watchdog for the guided calibration walkthrough. Runs every 100 ms
+  // while the flow is in step 2 and keeps the action button truthful: it
+  // unlocks as soon as the signal is ready, advances the thin progress bar
+  // with the settling time, and after CAL_STEP2_FORCE_AFTER_MS without a
+  // usable signal it offers an explicit exit (no motion data at all) or a
+  // warned LOCK ANYWAY instead of leaving the button disabled forever.
+  _startCalStep2Interval(button, status, progress) {
+    if (this._calStep2Interval) clearInterval(this._calStep2Interval);
+    this._calStep2NoSensor = false;
+    this._calStep2Interval = setInterval(() => {
+      if (this._calFlowStep !== 2) {
+        clearInterval(this._calStep2Interval);
+        this._calStep2Interval = null;
+        return;
+      }
+      const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
+      const elapsed = Date.now() - (this._calStep2StartTime || Date.now());
+      const held = Math.min(2.5, (readiness.stableMs || 0) / 1000).toFixed(1);
+      const step2Pct = 50 + Math.min(25, (readiness.stableMs || 0) / 100);
+      if (progress) progress.style.width = step2Pct + '%';
+      const thin = document.getElementById('calProgress');
+      if (thin) thin.style.width = step2Pct + '%';
+      if (button) {
+        if (readiness.ready) {
+          this._calStep2NoSensor = false;
+          button.disabled = false;
+          button.textContent = `READY · LOCK ${this.calWeightG}g`;
+        } else if (readiness.sampleCount === 0 && elapsed >= CAL_STEP2_FORCE_AFTER_MS) {
+          this._calStep2NoSensor = true;
+          button.disabled = false;
+          button.textContent = 'NO SENSOR DATA — TAP TO EXIT';
+        } else if (elapsed >= CAL_STEP2_FORCE_AFTER_MS && readiness.snr >= 1.5) {
+          this._calStep2NoSensor = false;
+          button.disabled = false;
+          button.textContent = `LOCK ANYWAY (${this.calWeightG}g · UNVERIFIED)`;
+        } else {
+          this._calStep2NoSensor = false;
+          button.disabled = true;
+          button.textContent = `SETTLING ${held}/2.5s · ${readiness.sampleCount}/80`;
+        }
+      }
+      if (status) {
+        status.textContent = readiness.ready
+          ? 'STEADY · READY TO CAPTURE'
+          : ((readiness.reasons && readiness.reasons[0]) || 'HOLD STILL').toUpperCase();
+      }
+    }, 100);
+  }
+
   async _startCalibration() {
     if (!this.powered) {
       if (this._awaitingMotionPermission && DeviceCapabilities.hasMotionPermission) {
@@ -1274,6 +1457,10 @@ class PhonewayApp {
       await this.scale.tare();
       this._showToast("Step 2: Place " + this.calWeightG + "g weight, then press TARE to calibrate", 12000);
       this._pendingCalibration = true;
+      // The step-2 clock starts here so a TARE press in the fallback path
+      // gets the same waiting / no-sensor / force-lock decisions as the
+      // guided walkthrough.
+      this._calStep2StartTime = Date.now();
       this._updateCalibrationGuide();
       return;
     }
@@ -1319,6 +1506,10 @@ class PhonewayApp {
       body.textContent = cfg.body;
       status.textContent = cfg.status;
       progress.style.width = cfg.progress;
+      // The thin progress bar under the readout mirrors the walkthrough so
+      // it reflects real progress instead of never advancing.
+      const thin = document.getElementById('calProgress');
+      if (thin) thin.style.width = cfg.progress;
       button.textContent = cfg.button;
       // The walkthrough button starts hidden in the HTML; show it so START TARE is tappable.
       button.style.display = "block";
@@ -1355,59 +1546,55 @@ class PhonewayApp {
         this._calFlowLockedWeight = null;
         render(2);
 
-        // Active interval: guarantees the button unlocks and updates every 100ms
-        if (this._calStep2Interval) clearInterval(this._calStep2Interval);
-        this._calStep2Interval = setInterval(() => {
-          if (this._calFlowStep !== 2) {
-            clearInterval(this._calStep2Interval);
-            this._calStep2Interval = null;
-            return;
-          }
-          const readiness = this.scale.getCalibrationReadiness(this.calWeightG);
-          const held = Math.min(2.5, (readiness.stableMs || 0) / 1000).toFixed(1);
-          if (button) {
-            button.disabled = !readiness.ready;
-            button.textContent = readiness.ready
-              ? `READY · LOCK ${this.calWeightG}g`
-              : `SETTLING ${held}/2.5s · ${readiness.sampleCount}/80`;
-          }
-          if (status) {
-            status.textContent = readiness.ready
-              ? "STEADY · READY TO CAPTURE"
-              : ((readiness.reasons && readiness.reasons[0]) || "HOLD STILL").toUpperCase();
-          }
-        }, 100);
+        // Active watchdog: keeps the button truthful and guarantees it
+        // unlocks (ready, LOCK ANYWAY, or NO SENSOR DATA exit) instead of
+        // staying disabled forever on a sensor-less or weak-signal device.
+        this._startCalStep2Interval(button, status, progress);
         return;
       }
 
       if (this._calFlowStep === 2 || this._calFlowStep === 3) {
+        // The watchdog's NO SENSOR DATA state turns this button into an exit:
+        // there is no motion stream to lock, so the only honest action is to
+        // leave the flow with an explanation instead of stalling.
+        if (this._calStep2NoSensor) {
+          if (this._calStep2Interval) {
+            clearInterval(this._calStep2Interval);
+            this._calStep2Interval = null;
+          }
+          overlay.classList.remove('show');
+          overlay.style.display = 'none';
+          this._calFlowActive = false;
+          this._calFlowStep = 0;
+          this._pendingCalibration = false;
+          this._showToast('No motion data on this device — calibration needs a phone with working motion sensors.', 6000);
+          return;
+        }
         if (this._calStep2Interval) {
           clearInterval(this._calStep2Interval);
           this._calStep2Interval = null;
         }
         button.disabled = true;
-        status.textContent = "CALIBRATING...";
-        body.textContent = "Locking sensitivity for " + this.calWeightG + "g. Keep phone still...";
-        const res = this.scale.calibrate(this.calWeightG, { reference: this.calReference });
-        if (res.success) {
-          soundEffects.playPowerChime(true);
-          hapticFeedback([30, 50, 30]);
-          this._calFlowStep = 4;
-          render(4);
-          this._updateCalibrationGuide();
-          if (res.warning) this._showToast(res.warning, 5000);
-          return;
-        } else {
-          status.textContent = "CALIBRATION FAILED";
-          body.textContent = "Calibration error: " + res.error + "\n\nTip: Place phone on a mouse pad, folded cloth, or fulcrum so the weight creates a detectable tilt.";
-          button.disabled = false;
-          button.textContent = "RETRY STEP 2";
-          this._calFlowStep = 2;
-          this._calStep2StartTime = Date.now();
-          this._calFlowStableCount = 0;
-          this._calFlowReadings = [];
+        status.textContent = 'CALIBRATING...';
+        body.textContent = 'Locking sensitivity for ' + this.calWeightG + 'g. Keep phone still...';
+        // Same state machine as the physical TARE press: register the weight,
+        // or stay in step 2 with an explicit reason and a retry.
+        const outcome = this._registerCalibrationWeight();
+        if (outcome.outcome === 'registered') {
+          this._onCalibrationRegistered(outcome.result, outcome.forced);
           return;
         }
+        this._calFlowStep = 2;
+        this._calStep2StartTime = Date.now();
+        this._calFlowStableCount = 0;
+        this._calFlowReadings = [];
+        status.textContent = outcome.outcome === 'no-sensor' ? 'NO MOTION DATA' : 'NOT REGISTERED';
+        body.textContent = outcome.reason + '\n\nTip: Place phone on a mouse pad, folded cloth, or fulcrum so the weight creates a detectable tilt.';
+        button.disabled = false;
+        button.textContent = outcome.outcome === 'no-sensor' ? 'EXIT CALIBRATION' : 'RETRY STEP 2';
+        this._showToast(outcome.reason, 6000);
+        this._startCalStep2Interval(button, status, progress);
+        return;
       }
 
       if (this._calFlowStep === 4) {
@@ -1659,7 +1846,14 @@ class PhonewayApp {
     } catch (e) {
       this._precisionMode = false;
       this._setState('READY');
-      this._showToast('Precision measurement failed', 3000);
+      // Surface the real cause instead of a bare "failed": the thrown reason
+      // (e.g. no stable reading) is what the user needs to act on, and the
+      // retry is a tap away.
+      const cause = (e && e.message) ? e.message : 'unknown error';
+      try {
+        telemetry.logSensorError('precision', cause);
+      } catch {}
+      this._showToast(`Precision measurement failed: ${cause} — tap PRECISION to retry`, 6000);
     }
   }
 
@@ -1669,12 +1863,15 @@ class PhonewayApp {
     
     chipsContainer.innerHTML = '';
     
-    const weights = getRecommendedWeights().slice(0, 6);
-    
+    // Deduplicated by (icon, grams) and labelled with the weight name, so
+    // same-gram entries (e.g. the three 💵 1g bills) can no longer appear as
+    // identical "💵 1g" chips. Uses the existing .verify-chip-* CSS classes.
+    const weights = getVerifyChipWeights(6);
+
     weights.forEach(w => {
       const chip = document.createElement('button');
       chip.className = 'verify-chip';
-      chip.innerHTML = `${w.icon} ${w.grams}g`;
+      chip.innerHTML = `<span class="verify-chip-icon">${w.icon}</span> <span class="verify-chip-grams">${w.grams}g</span> <span class="verify-chip-label">${w.name}</span>`;
       chip.addEventListener('click', () => this._selectReferenceWeight(w, chip));
       chipsContainer.appendChild(chip);
     });
@@ -1693,11 +1890,34 @@ class PhonewayApp {
     document.getElementById("vExpected").textContent = weight.grams.toFixed(2);
     document.getElementById("verifyTip").textContent = "Place weight on scale...";
 
+    // Verify watchdog: the comparison only renders on a stable reading, so
+    // on a sensor-less or unsteady device it used to sit on "···" forever.
+    // After 20 s without a stable reading, say so and offer a retry instead.
+    if (this._verifyWaitTimer) clearTimeout(this._verifyWaitTimer);
+    this._verifyWaitTimer = setTimeout(() => {
+      this._verifyWaitTimer = null;
+      if (!this._selectedRefWeight) return;
+      const passEl = document.getElementById("vPass");
+      if (passEl) {
+        passEl.textContent = "NO STABLE READING";
+        passEl.className = "vstat-pass fail";
+      }
+      document.getElementById("verifyTip").textContent =
+        "No stable reading in 20 s — hold the phone still on a soft surface, or tap another weight to retry.";
+      this._showToast("Verify timed out: no stable reading in 20 s. Hold still and tap another weight to retry.", 6000);
+    }, 20000);
+
     this._updateVerifyComparison();
   }
 
   _updateVerifyComparison() {
     if (!this._selectedRefWeight || !this.scale.isStable) return;
+
+    // A stable reading arrived — the verify watchdog has done its job.
+    if (this._verifyWaitTimer) {
+      clearTimeout(this._verifyWaitTimer);
+      this._verifyWaitTimer = null;
+    }
 
     const result = calculateVerification(this.currentG, this._selectedRefWeight);
 
@@ -1864,6 +2084,10 @@ class PhonewayApp {
   }
 
   _hideVerifyPanel() {
+    if (this._verifyWaitTimer) {
+      clearTimeout(this._verifyWaitTimer);
+      this._verifyWaitTimer = null;
+    }
     const panel = document.getElementById('verifyPanel');
     if (panel) {
       panel.classList.remove('show');
@@ -1889,7 +2113,7 @@ class PhonewayApp {
     }
   }
 
-  _updateStats() {
+  _updateStats(forceCommunityRefresh = false) {
     const calQuality = this.scale.getCalibrationQuality();
     const verifStats = this.scale.getVerificationStats();
     const evidence = this.scale.getAccuracyEvidence();
@@ -1968,7 +2192,10 @@ class PhonewayApp {
       if (calQuality.points < 3) {
         recs.push(`• Add ${3 - calQuality.points} more calibration points for better accuracy`);
       }
-      if (calQuality.r2 < 0.95) {
+      // A "non-linear curve" conclusion needs at least 2 points to fit a
+      // curve at all. With zero data r2 is 0 by default, which used to make
+      // the panel claim non-linearity alongside "ML samples: 0" and grade "—".
+      if (calQuality.points >= 2 && calQuality.r2 < 0.95) {
         recs.push('• Calibration curve is non-linear — check surface quality');
       }
       if (!verifStats || verifStats.totalVerifications < 3) {
@@ -1981,6 +2208,26 @@ class PhonewayApp {
       recList.innerHTML = recs.length > 0 ? recs.join('<br>') : 'Calibration optimal — no action needed';
     }
     
+    // Community Accuracy: this element was never written by any JS, so it
+    // sat on "Loading…" forever when the fetch stalled or failed. Render
+    // cached stats when present, otherwise fetch with a timeout and show an
+    // error + retry state instead of spinning silently.
+    const commEl = document.getElementById('accCommunity');
+    if (commEl) {
+      const meanErr = telemetry.globalMeanError();
+      const passRate = telemetry.globalPassRate();
+      if (meanErr != null && passRate != null) {
+        commEl.textContent = `Community: mean error ±${meanErr.toFixed(1)}g · pass rate ${Math.round(passRate * 100)}%`;
+        commEl.style.color = '#aaa';
+      } else {
+        commEl.textContent = 'Community stats unavailable — tap ↻ RETRY';
+        commEl.style.color = '#888';
+        telemetry.fetchGlobalStats(forceCommunityRefresh).then((d) => {
+          if (d) this._updateStats();
+        }).catch(() => {});
+      }
+    }
+
     const envBaro = document.getElementById('envBaro');
     if (envBaro) envBaro.textContent = '—';
     if (navigator.getBattery) {
