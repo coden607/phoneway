@@ -1,0 +1,6 @@
+watchdog
+boto3
+librosa
+speechbrain
+numpy
+scipy
